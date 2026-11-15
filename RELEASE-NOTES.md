@@ -2,7 +2,7 @@
 <!-- Copyright (C) 2026 Dan B. Cooper -->
 # Kyujo: first release
 
-Play an N64 classic as a native program on **Windows, Linux (including Batocera), Android and Nintendo Switch**, from your own game file. No emulator: Kyujo runs the game's code (the community decompilation by [Team Hippodrome](https://github.com/team-hippodrome/pokestadium)) and reproduces the console's hardware by hand.
+Play an N64 classic as a native program on **Windows, Linux (including Batocera), Android and Nintendo Switch**, from your own game file. No emulator: Kyujo runs the game's code (the community decompilation by [Team Hippodrome](https://github.com/team-hippodrome/pokestadium)) and **[Pret](https://github.com/pret/pokestadium)** and reproduces the console's hardware by hand.
 
 ## Get it
 
@@ -47,6 +47,6 @@ Open an [issue](../../issues/new/choose) with your system and what happened, and
 
 ## Credits
 
-Thanks to **Team Hippodrome** for the decompilation, whose years of work make Kyujo possible. Other components and their licences: [`THIRD-PARTY.md`](THIRD-PARTY.md).
+Thanks to **Team Hippodrome** and **Pret** for the decompilation, whose years of work make Kyujo possible. Other components and their licences: [`THIRD-PARTY.md`](THIRD-PARTY.md).
 
 *Not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc. or The Pokémon Company. Game and company names are used only to say which game and hardware Kyujo works with ([`NOTICE.md`](NOTICE.md)).*

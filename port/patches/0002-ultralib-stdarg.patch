@@ -1,0 +1,23 @@
+Port patch 0002 - stdarg.h for non-IDO compilers in the bundled libultra
+Why: lib/ultralib/include/ido/stdarg.h uses __builtin_classof, which only IDO has. The game's own include/stdarg.h already
+falls back to the compiler builtins when __sgi is not defined; this does the same for the library copy.
+
+--- a/lib/ultralib/include/ido/stdarg.h
++++ b/lib/ultralib/include/ido/stdarg.h
+@@ -1,5 sha256=dda9cae30fe8f25b3dde62f2a40305cc5cc0f973bb744b1f3f232cc98d834b62 @@
+=2
++
++/* PORT: the code below only works with the IDO compiler (__builtin_classof exists nowhere else). Every other compiler uses its
++ * own builtins, exactly as the game's own include/stdarg.h already does. */
++#ifndef __sgi
++typedef __builtin_va_list va_list;
++#define va_start(vp, parmN) __builtin_va_start(vp, parmN)
++#define va_arg(vp, mode) __builtin_va_arg(vp, mode)
++#define va_end(vp) __builtin_va_end(vp)
++#else
+=3
+@@ -30,4 sha256=068bcd5613792fe74603f09d18b35f38111d61ca5b3fc52f49550d4f66d40951 @@
+=3
++#endif /* __sgi */
++
+=1

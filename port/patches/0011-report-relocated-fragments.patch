@@ -1,0 +1,21 @@
+Port patch 0011 - report every relocated fragment to the host
+Why: the port runs the C code of the code overlays natively and maps a call into a loaded overlay to the native function
+(src/platform/host_fragment.c). It found the overlay through gFragments, but that table keeps ONE entry per id: the battle scene loads
+an arena file and later another file from the same archive (same id), which replaces the entry although the first file's code stays in
+the pool and is called afterwards (found by running the game: "call into the memory pool outside any loaded fragment"). The loader
+now also reports each relocated fragment (id, address, size) to the host, which keeps its own list of the extents.
+
+--- a/src/memmap.c
++++ b/src/memmap.c
+@@ -8,6 sha256=3bca9ceed442a0f0ca76fb162016deda25d756146bb1a7f5427d6e50b892a075 @@
+=3
++
++/* PORT: tells the host where a fragment's code now lives (src/platform/host_fragment.c). gFragments is not enough for that: a later load
++ * with the same id replaces the entry, although the earlier fragment's code stays in the pool and is still called (the arena files of
++ * the battle scene are such fragments). */
++void HostNoteFragmentLoaded(u32 id, void* fragment, u32 size);
+=3
+@@ -105,6 sha256=a440f6dd67cd18164548a7e20e4c68f21bf5749c72b622319ee0d62429708f7f @@
+=3
++    HostNoteFragmentLoaded(id, fragment, fragment->sizeInRam);
+=3

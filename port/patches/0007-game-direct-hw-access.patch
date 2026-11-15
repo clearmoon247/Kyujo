@@ -1,0 +1,46 @@
+Port patch 0007 - the game's direct hardware accesses
+Why: the game (not libultra) touches hardware in a few places without the IO_READ macro:
+  - HW_REG() in include/macros.h dereferences 0xA4xxxxxx. Natively that is not memory. Every use that gets executed now stops the
+    program and names the register; the two uses that the game really reaches are changed to IO_READ (below).
+  - src/game_state.c (Game_DoCopyProtection) and src/fragments/area_select (AreaSelect_CheckCartRemoved) read a word of cartridge
+    space (0xB0000E38, 0xB0000D10) to detect a removed or non-original cartridge. IO_READ serves it from the loaded ROM.
+  - src/libleo/driveexist.c (LeoDriveExist): report "no 64DD drive" instead of probing the drive's ROM over the PI bus. The 64DD
+    is not emulated; a console without the drive gives the same answer.
+
+--- a/include/macros.h
++++ b/include/macros.h
+@@ -18,7 sha256=aa6db70deb82ff0409fd35d96e022ef44f5b91f99e0dacb57b1c340b8d104599 @@
+=3
+-1
++/* PORT: on a PC the hardware registers are not memory, so this direct access cannot work. Any use that is actually executed stops the
++ * program and names the register (src/ultra/hw_regs.c: HostHwDirectAccess). The places the game really reaches are patched to use
++ * IO_READ instead. */
++extern void* HostHwDirectAccess(unsigned int reg);
++#define HW_REG(reg, type) (*(volatile type*)HostHwDirectAccess((unsigned int)(reg)))
+=3
+--- a/src/game_state.c
++++ b/src/game_state.c
+@@ -590,7 sha256=8edfc16cc9303ff0df3acc4dddc9ab854868d8311ca1aa6e90e2166b9e5089bd @@
+=3
+-1
++    // PORT: both reads go through the register emulation (cartridge space 0xB0000E38 is read from the loaded ROM).
++    if (!(IO_READ(PI_STATUS_REG) & 3) && ((IO_READ(0xB0000E38) & 0xFFFF) != 0x828A)) {
+=3
+--- a/src/fragments/area_select/area_select.c
++++ b/src/fragments/area_select/area_select.c
+@@ -132,8 sha256=559cda1d7e0ba87270bd15386da3c551e2d41154871ef109031c7004d7a53b9b @@
+=3
+-2
++    // PORT: both reads go through the register emulation (cartridge space 0xB0000D10 is read from the loaded ROM).
++    if (!(IO_READ(PI_STATUS_REG) & (PI_STATUS_DMA_BUSY | PI_STATUS_IO_BUSY)) &&
++        ((IO_READ(0xB0000D10) & 0xFFFF) != 0x400)) {
+=3
+--- a/src/libleo/driveexist.c
++++ b/src/libleo/driveexist.c
+@@ -15,6 sha256=daabb08833b358cd4ca1fd477a62648a6c8c069fc71d073ebfaedd628503ed7b @@
+=3
++
++    // PORT: report "no 64DD attached", which is what a console without the disk drive reports. The original probes the drive's
++    // ROM through the PI bus; this port does not emulate the 64DD. The rest of the function is therefore not executed.
++    return 0;
+=3

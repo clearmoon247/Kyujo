@@ -1,0 +1,18 @@
+Port patch 0014 - give the Area Select magnemite trails room for their six afterimages
+Why: AreaSelect_AdvanceMagnemiteTrail writes six afterimages per trail although the struct declares four (a deliberate decomp trick:
+"FAKE" note in area_select.c), so the last of the three trails writes 0xC bytes past the end of sAreaSelectMagnemiteTrails[3]. The
+original compiler's layout of these statics is not known here (presumably the spill was harmless); on the native build the compiler orders the statics differently and the spill overwrote
+sAreaSelectSelectedIndex (became 0x135), the banner texture lookup went far out of range and the renderer crashed (found by running
+the game, located with a data watchpoint). The array gets two spare elements; nothing else changes.
+
+--- a/src/fragments/area_select/area_select.c
++++ b/src/fragments/area_select/area_select.c
+@@ -119,7 sha256=60a694bdaa05cbbc439db7b3746b8ad423504c1f14bd9163f76a6200487b40a4 @@
+=3
+-1
++/* PORT: 5 elements instead of 3. The code addresses six afterimages per trail (see the FAKE note on the struct), so the last trail's
++ * writes reach 0xC bytes past the end of the three-element array (offset 0x78 of 0x6C). The original compiler's layout of these statics is not known here (it was presumably harmless);
++ * on the port the compiler lays the statics out differently and it overwrote sAreaSelectSelectedIndex (found by running the game: the
++ * area index became 0x135 and the banner texture lookup read far outside its table). The two extra elements are only room for the spill. */
++static AreaSelectMagnemiteTrail sAreaSelectMagnemiteTrails[5];
+=3

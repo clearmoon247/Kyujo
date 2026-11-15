@@ -1,0 +1,33 @@
+Port patch 0013 - look up font glyph indices in the glyph table by name
+Why: Font_MapGlyphCode reads the glyph table D_8006F650 only by indexing past the end of the display-list arrays gUiRestoreTextureDL
+(code 0x20..0x7F) and D_8006F608 (code 0xA0..0xFF), relying on the original linker placing the table right behind them. Nothing else
+references the table, so the native compiler drops it and the lookups read unrelated data: all on-screen text was garbled (found by
+running the game, confirmed with nm). The table is now non-static and indexed directly with the same indices as the original layout
+(code - 0x20, and 0x60 + code - 0xA0; the US table has 0xC0 entries). Behaviour on the original build is unchanged.
+
+--- a/src/ui_graphics.c
++++ b/src/ui_graphics.c
+@@ -147,7 sha256=c853b183d00188393591c872245078f3cb632875b593739b2e22c606563f1cb9 @@
+=3
+-1
++/* PORT: not static, and declared in graphics_textures.c. Font_MapGlyphCode reaches this table only through an overrun of the
++ * preceding display-list arrays, so nothing else referenced it and the native compiler dropped it (see port patch 0013). */
++u8 D_8006F650[] = {
+=3
+--- a/src/graphics_textures.c
++++ b/src/graphics_textures.c
+@@ -302,13 sha256=33a2e3d3f8ad201d86d5d1c1c34a911dba93ccfacb0f5ffa7b1453a4884eefa1 @@
+=3
++/* PORT: the original code indexes past the end of the display-list arrays gUiRestoreTextureDL and D_8006F608, relying on the
++ * linker having placed the glyph table D_8006F650 right behind them (D_8006F650 = gUiRestoreTextureDL + 0x20 and
++ * D_8006F608 + sizeof(Gfx) + 0xA0 = D_8006F650 + 0x60). Nothing else references the table, so the native compiler discards it and the
++ * lookup read unrelated data (garbled text). Index the table by name instead; the indices are the same as in the original layout. */
++extern u8 D_8006F650[];
++
+=4
+-1
++        var_v1 = D_8006F650[arg0 - 0x20];
+=1
+-1
++        var_v1 = D_8006F650[0x60 + (arg0 - 0xA0)];
+=3

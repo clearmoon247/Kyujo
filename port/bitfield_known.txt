@@ -1,0 +1,11 @@
+# Source files (paths relative to the decomp tree) that still contain C bit-fields.
+#
+# Why this list exists: MIPS (big-endian) allocates the first declared bit-field in the MOST significant bits of its storage unit; x86
+# allocates it in the LEAST significant bits. The big-endian memory rewrite (tools/native/be_memory.py) makes whole words agree, but
+# it cannot change which bits a bit-field names, so bit-field VALUES computed by these files are wrong. The build refuses every
+# file that uses a bit-field unless it is listed here, and prints a warning for each listed file, so none can be forgotten.
+#
+# How an entry leaves the list: the bit-fields are replaced by shifts and masks (accessor macros), after which the build accepts
+# the file without an entry.
+
+# (No file is listed at the moment. The Transfer-Pak emulator's sound-register bit-fields were replaced by shifts and masks in patch 0024.)

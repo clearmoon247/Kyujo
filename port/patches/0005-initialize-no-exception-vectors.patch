@@ -1,0 +1,13 @@
+Port patch 0005 - osInitialize without the exception-vector copy
+Why: osInitialize writes MIPS handler code to the CPU exception vectors at 0x80000000.., which do not exist on a PC (a write there
+would crash). The scheduler layer handles interrupts instead (src/ultra/os_sched.c).
+
+--- a/lib/ultralib/src/os/initialize.c
++++ b/lib/ultralib/src/os/initialize.c
+@@ -85,12 sha256=819855ecfdedd111a6c7402d4e1844b7ee77372d8b423bdd32a36431c9b1a352 @@
+=3
+-6
++    /* PORT: the original copies the CPU's exception-handler stub (__osExceptionPreamble, MIPS code) into the exception vectors at
++     * 0x80000000..0x80000180. A PC has neither those addresses nor that handler: interrupts reach the game through
++     * src/ultra/os_sched.c instead. Nothing to do here. */
+=3

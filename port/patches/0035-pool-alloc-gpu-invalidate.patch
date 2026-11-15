@@ -1,0 +1,22 @@
+Port patch 0035 - tell the graphics back end when the main pool gives out memory (main_pool_alloc_from_pool)
+Why: the GPU renderer (shell/core/gpu_gles.c) keeps the colour surfaces the RDP drew into on the GPU and copies them back into game memory only when the game reads them
+(a texture load) or when a surface of another shape replaces them. The console's RDP writes into RAM at once, so there the game simply overwrites that memory later. Here a
+surface that was never read stays "newer than RAM" for ever, and when the pool had meanwhile given its memory to something else (decompressed assets, the pool's own block
+headers) the late copy-back overwrote them: the block header of an unrelated pool block became a run of 0x60C7 (a framebuffer clear colour), the next main_pool_pop_state called a
+"function" at 0x60C760C7 (trap: call through an empty function-table slot), and the rental icons of the team-selection menu were missing (measured: Stadium Select after the cup menu).
+How: every pool allocation reports its range to __osHostPoolMemoryReused (src/ultra/hw_sp.c), which tells the renderer to drop the surfaces over that range WITHOUT copying them back:
+fresh memory has no picture worth keeping. Nothing changes on the software renderer builds (the call does nothing there).
+
+--- a/src/memory_main.c
++++ b/src/memory_main.c
+@@ -4,6 sha256=49994b0a86811f8b331b8467f3c5a1c4c305569a8f9cfb04945558fdb98ceb62 @@
+=3
++/* PORT (patch 0035): tells the graphics back end that this memory now belongs to something else (src/ultra/hw_sp.c). */
++extern void __osHostPoolMemoryReused(void* addr, u32 size);
+=3
+@@ -71,6 sha256=742f3588f7d08c7915cf837d244eca2b09038d9f1d485b49c651ae935fe4f2f4 @@
+=3
++    if (addr != NULL) {
++        __osHostPoolMemoryReused((u8*)addr - sizeof(MainPoolBlock), size + sizeof(MainPoolBlock)); // PORT (patch 0035)
++    }
+=3

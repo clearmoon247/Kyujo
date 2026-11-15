@@ -1,0 +1,21 @@
+Port patch 0012 - keep the JPEG task's parameter block and quantisation tables out of the thread stack
+Why: Jpeg_DecodeImage passes the address of a local parameter block (sp90) to the RSP task and stores the addresses of two local
+quantisation tables in it after reducing them with '& 0x1FFFFFFF' (virtual to physical address). On the port a thread's stack is host
+memory outside the low address range in which a pointer is the physical address, so those addresses were mangled and the host-side
+JPEG decoder (src/render/jpeg_task.c) crashed reading them (found by running the game). Making both static puts them in the program
+image, which lies below 0x01000000. The decoder is not reentrant anyway (Jpeg_DecodeMcus keeps its bit-stream state in globals).
+
+--- a/src/jpeg_stream.c
++++ b/src/jpeg_stream.c
+@@ -142,11 sha256=a416798fa513820ddc2ba49acf0324b008906d8e7f387e5a20f1cdf54ef14b08 @@
+=3
+-1
++    /* PORT: static, not on the stack. The parameter block (sp90) and the quantisation tables (sp200) are handed to the RSP task by
++     * address, and Jpeg_BuildDspOutput reduces the table addresses with '& 0x1FFFFFFF' (virtual to physical). On this port a thread's
++     * stack lies outside the low address range where a pointer IS the physical address, so a stack address would be mangled. Statics lie
++     * inside the program image (below 0x01000000). Only one image is decoded at a time. */
++    static u8 sp200[2][0x80];
+=3
+-1
++    static unk_func_80003680_sp90 sp90;
+=3

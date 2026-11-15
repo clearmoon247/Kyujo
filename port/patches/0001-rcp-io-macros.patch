@@ -1,0 +1,16 @@
+Port patch 0001 - route RCP register access through the host
+Why: IO_READ/IO_WRITE dereference KSEG1 addresses (0xA4000000...). Natively those are unmapped. libultra's C code uses these
+two macros for every device register, so redirecting them lets the real libultra run on an emulated register file.
+
+--- a/lib/ultralib/include/PR/rcp.h
++++ b/lib/ultralib/include/PR/rcp.h
+@@ -833,8 sha256=25c0d5720bd544bbd4b2fed30e6466d86c870328c5147d949387de3f0acd5209 @@
+=3
+-2
++/* PORT: on a PC the RCP registers are not memory. Every register access goes through the host's hardware emulation
++ * (src/ultra/hw_regs.c), which takes the physical address. Unimplemented registers stop the program and name themselves. */
++extern unsigned int HostHwRead32(unsigned int physAddr);
++extern void HostHwWrite32(unsigned int physAddr, unsigned int data);
++#define	IO_READ(addr)       HostHwRead32((unsigned int)(addr))
++#define	IO_WRITE(addr,data) HostHwWrite32((unsigned int)(addr), (unsigned int)(data))
+=3

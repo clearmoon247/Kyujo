@@ -1,0 +1,14 @@
+Port patch 0006 - main memory pool end as a host pointer
+Why: Util_InitMainPools passes POOL_END_4MB / POOL_END_6MB (0x80400000 / 0x80600000, N64 addresses) as the end of the pool whose start
+is the host array gPool. The end must be gPool plus the same size. POOL_START is the N64 address gPool was linked at (include/variables.h).
+
+--- a/src/util.c
++++ b/src/util.c
+@@ -63,9 sha256=9fb886b035e4ce4a276d9dd6aba230b272df2831e9c4ca74599700fee9ccf224 @@
+=3
+-1
++        main_pool_init(&gPool, (u8*)&gPool + (POOL_END_6MB - POOL_START)); // PORT: end of the pool as a host pointer (the constant is an N64 address)
+=1
+-1
++        main_pool_init(&gPool, (u8*)&gPool + (POOL_END_4MB - POOL_START)); // PORT: ditto
+=3

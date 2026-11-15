@@ -1,0 +1,23 @@
+Port patch 0018 - the Game Boy emulator's buffer-pointer array really has three entries (the third is the variable the decomp calls D_8122B2E0)
+Why: GB Tower emulator start (func_812033F4) stores three buffer pointers with `((u8**)D_8122B2D8)[i] = ...` for i = 0..2 and later code reads
+the third one as `D_8122B2E0`. The decomp declares D_8122B2D8 with 2 entries and D_8122B2E0 as a separate s32; on the console they are adjacent
+(D_8122B2D8 + 8 == D_8122B2E0; the variable names are the console addresses and the symbol_addrs of the de, us_rev1 and us_rev2 versions agree), so the "out of bounds" store of entry 2 is the store to D_8122B2E0. In the native program the linker puts the
+variables in another order and the store landed on D_8122B2C0, the pointer to the emulator state: later code then used a pixel buffer as the
+emulator state (seen: the thread waiting for a flag that is never cleared, the flag byte full of picture data). The patch declares the array with
+3 entries and defines D_8122B2E0 as a name for the third (it is only ever read). This is the fourth case of the console's memory layout being
+relied on by accident (see patch 0017).
+
+--- a/src/fragments/gb_tower_emulator/gb_tower_emulator_7F9A0.c
++++ b/src/fragments/gb_tower_emulator/gb_tower_emulator_7F9A0.c
+@@ -770,8 sha256=ffe83aaab77433baa6362cf4f6b3804fb8a6e7ee5ca6190d0dc227609f9fe486 @@
+=3
+-2
++/* PORT: three entries, and D_8122B2E0 is the third. The decomp declares this as an array of 2 followed by the separate variable
++ * D_8122B2E0, but func_812033F4 fills three entries in a loop (`((u8**)D_8122B2D8)[i]`, i = 0..2) and the rest of the code reads the third as
++ * the value D_8122B2E0. On the console the two declarations are adjacent (the names are the console addresses: 0x8122B2D8 + 8 = 0x8122B2E0; the
++ * symbol_addrs files of the other versions put the two 8 bytes apart as well), so the
++ * out-of-bounds store lands exactly on D_8122B2E0. The native linker places other variables there: the store overwrote D_8122B2C0 (the pointer
++ * to the emulator state) with a buffer address - found by debugging the Game Boy emulator start, which then waited forever on garbage. */
++u8* D_8122B2D8[3];
++#define D_8122B2E0 ((s32)D_8122B2D8[2])
+=3

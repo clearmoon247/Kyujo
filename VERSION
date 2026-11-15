@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Dan B. Cooper
+# The version shown in the Android app and on the Switch. "dev" until a release is numbered: put the number here (one line) when it is.
+dev

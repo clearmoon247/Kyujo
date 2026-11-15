@@ -1,0 +1,18 @@
+Port patch 0009 - an array the decomp declared too small
+Why: D_800AA6C8 in src/geo_render.c holds one matrix pointer per animated part. The decomp declares 8 entries and then a 0x1E0-byte
+padding array (pad_D_800AA6E8); the true array is 0x200 bytes (128 entries). On the console the padding follows the array in memory,
+so an index of 10 (which the model data really contains, found while running the game) is harmless. In this port the compiler places
+statics in any order, and index 10 overwrote the neighbouring pointer D_800ABCB8 (found with a hardware watchpoint). The array is
+declared at its true size and the padding array is removed.
+
+--- a/src/geo_render.c
++++ b/src/geo_render.c
+@@ -108,8 sha256=d6d03ae1802c3b759d841a0b18421baedd474b305fd9df1a898ace2feae8bcb9 @@
+=3
+-2
++/* PORT: the original array is 0x200 bytes (128 pointers): the game indexes it with a byte from the model data (arg->unk_30 in
++ * Geo_NodeAnimatedPart) and uses values above 7, e.g. 10. The decomp declared 8 entries and the rest as the padding array
++ * pad_D_800AA6E8; that matches the console's memory layout (the statics follow each other) but not this port's, where the compiler
++ * orders statics freely and an index of 10 would overwrite D_800ABCB8. Declared at its true size here. */
++static MtxF* D_800AA6C8[128];
+=3

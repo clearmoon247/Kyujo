@@ -1,0 +1,19 @@
+Port patch 0031 - title screen attract demo: the six-scenario table must be one array (the game hung at the title screen on the third attract demo)
+Why: found while testing the Pikachu reward scene on Linux: after the scene the program went back to the title screen, was left idle there, and stopped drawing (the audio kept running). gdb showed the game thread spinning in Title_PickDemoMatchup (do { sp38 = Random * sp2C } while (temp_s0 == sp38)) with sp2C = 0, the number of eligible Pokemon.
+Cause: Title_StartAttractDemo picks a scenario row with (progress % 12) / 2, i.e. rows 0..5, from gTitleAttractDemoScenarios[2][4]. The decomp keeps rows 2..5 in a second array, D_82100E6C[4][4], declared right behind it: on the console the linker put them back to back, so row 2 was D_82100E6C[0]. A native linker aligns each array to 8 bytes and may place it anywhere (the same class of fault as patches 0022 and 0023): rows 2..5 were unrelated bytes, the mask of row 2 was 0, Title_CountEligibleDemoEntries returned 0 and both random picks were always 0, so the loop never ended. It starts on the fifth attract demo start (progress 4), after about two attract demos' worth of idle time at the title.
+How: the six rows are one array; D_82100E6C is removed (it is not referred to anywhere else, checked with grep). The row values are the decomp's own.
+
+--- a/src/fragments/title_screen/title_screen.c
++++ b/src/fragments/title_screen/title_screen.c
+@@ -233,12 sha256=e297b03a3018e9ad5203578cdfb86c50d4708ead3ec8178e659a17674f1c82a2 @@
+=3
+-1
++/* PORT (patch 0031): ONE table of six scenarios. The decomp split it into two arrays (the first two rows, and D_82100E6C with the other four), but
++ * Title_StartAttractDemo indexes it with (progress % 12) / 2, i.e. rows 0..5: that only works when the two arrays are back to back, as the console's linker
++ * had them. Natively the second array was somewhere else, rows 2..5 were read from unrelated memory, the eligibility mask (byte 2 of a row) was 0, no
++ * Pokemon was eligible, and Title_PickDemoMatchup looped forever (its do-while loop, with both picks 0): the game hung at the title screen
++ * when the attract demo started for the fifth time (idle at the title). D_82100E6C was not used anywhere else. */
++static u8 gTitleAttractDemoScenarios[6][4] = {
+=2
+-3
+=3

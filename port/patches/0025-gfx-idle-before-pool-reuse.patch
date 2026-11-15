@@ -1,0 +1,27 @@
+Port patch 0025 - wait for the graphics task before the main pool gives memory back (main_pool_free, main_pool_pop_state)
+Why: the console's RDP draws a frame in well under a field, so by the time the game frees the memory of the last scene (main_pool_free / main_pool_pop_state, at a scene change)
+the last frame's display lists, textures and vertices have long been drawn. The native software renderer runs as a task on a worker thread and a frame can take two fields or
+more; if the game frees and re-uses that memory (the new scene's data is loaded into it) while the drawing still reads it, the task calls a sub-list that is already overwritten
+(0xFFFFFFFF words) and draws garbage or crashes (measured with the "wait only when drawing into the shown buffer" experiment).
+__osHostGfxIdleBeforeReuse (src/ultra/hw_sp.c) returns at once when no graphics task runs, otherwise it finishes the running task. Memory is only handed out again after a free,
+so this one place covers every reuse of pool memory without stopping the game at every field (the older fix, waiting at every picture change, made the whole game stand still for
+a full drawing task each field and starved the audio thread).
+Not covered: data at fixed addresses (overlay code and data are loaded to fixed places); see docs/windows-test-guide.md / the performance notes if this ever shows up.
+
+--- a/src/memory_main.c
++++ b/src/memory_main.c
+@@ -2,6 sha256=ebec3225d55ed03c710f332d717656c219f47afbd2aefeb9a7958fa6b70b8853 @@
+=3
++/* PORT (patch 0025): finishes a running graphics task before pool memory is given back (src/ultra/hw_sp.c). */
++extern void __osHostGfxIdleBeforeReuse(void);
++
+=3
+@@ -81,6 sha256=0dbad0b2fab10493bced66b0bba71722c583c05f0e6ba63537eb3031e2d97597 @@
+=3
++    __osHostGfxIdleBeforeReuse(); // PORT (patch 0025): the freed memory may be read by the running graphics task
++
+=3
+@@ -269,6 sha256=e9aaa98f02f7ea78dd204f0809a51003a677d4e52c449f2d507591f66e4dc83d @@
+=3
++    __osHostGfxIdleBeforeReuse(); // PORT (patch 0025): the popped memory may be read by the running graphics task
+=3

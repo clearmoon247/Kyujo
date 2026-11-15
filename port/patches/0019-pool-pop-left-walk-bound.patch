@@ -1,0 +1,25 @@
+Port patch 0019 - main_pool_pop_state ends its left-side walk at a link that is not inside the pool
+Why: leaving the Game Boy Tower (GbTower_Stop -> main_pool_pop_state('GBEM')) crashed. The emulator start (func_812033F4) DMAs the compressed
+"misc" table (ROM 0xADC80..0xF4130, 0x464B0 bytes) to the heap address + 0x80000, which is 0x146A8 (83,624) bytes past the end of its 0x1FEAF0-byte pool
+allocation, so the pool's left head block (the 16 bytes after the allocation) is overwritten with ROM bytes: its `prev` becomes 0x654D2A32. The decomp
+has the same layout on the console (the staging area is temporary and the free pool space after it is not otherwise used), and there the left
+walk `while (listHeadL <= argptr)` ends at once, because 0x654D2A32 is below every 0x80xxxxxx address. In the native program all addresses are below
+0x01000000, the comparison is true, and the walk dereferenced the garbage. The patch adds a "link is inside the pool" test to the loop, which
+gives the same result as the console for this case (no left-side block function runs at that pop - an inference from the code and the ROM bytes,
+not observed on a console) and changes nothing for an intact chain. Fixing the overrun instead would run those block functions for the first
+time, which is a behaviour change the console never had. See docs/known-decomp-issues.md ("address-space accident").
+
+--- a/src/memory_main.c
++++ b/src/memory_main.c
+@@ -313,7 sha256=260147ef30cd9f581ac2d75c3805ce9d9f4e7ec02fb80d490426455c27dee4e0 @@
+=3
+-1
++    /* PORT: the walk also stops at a link that is not a block of this pool.
++     * On the console `listHeadL <= argptr` is false for a garbage link below 0x80000000, so the walk ended there. The Game Boy emulator's
++     * start (func_812033F4) reads a compressed table into a staging area that reaches 83 KB past its allocation and so over the head block
++     * `listHeadL`, whose `prev` becomes 0x654D2A32 (bytes of the US ROM at 0xDFA88; computed, not observed on a console). With the
++     * native physical addresses (all below 0x01000000) that value is ABOVE listHeadL, the loop went on and dereferenced it. The pool range
++     * test gives the console's result here (no block function runs on this left walk) and changes nothing while the chain is intact. */
++    while ((uintptr_t)listHeadL <= (uintptr_t)argptr &&
++           (uintptr_t)argptr >= (uintptr_t)sMemPool.start - sizeof(MainPoolBlock) && (uintptr_t)argptr < (uintptr_t)sMemPool.end) {
+=3

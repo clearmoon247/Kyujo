@@ -1,0 +1,23 @@
+Port patch 0017 - give the battle-scene tick-slot array the spare slot that the console's memory layout provided
+Why: the "tick" callbacks of the battle animation state machine retire themselves with `slots[sBattleSceneStateTickSlotIndex].callback = sentinel`.
+The index is the loop counter of BattleScene_TickStateCallbacks, which stays 7 after the loop. Some callback evidently runs with the counter at 7
+(which path does that was NOT traced) and then writes slot 7, one past the array of 7. The decomp's symbol table shows what
+the console had there: the array ends at 0x843900A0, then sBattleSceneStateTickSlotIndex (0xA0) and D_843900A4, a variable that nothing
+reads, so the stray write was harmless. In the native program the linker places other variables behind the array; found by playing a
+battle for several minutes: sActivePokemon[1] became the address of BattleScene_StateCallbackNop and the next tick crashed. The patch makes
+the array 8 long (the loops still run to 7), so the stray write has a place to go. This is the third case of a console memory layout being
+relied on by accident (see also the aliases for gBaseStats and D_800780B3 in tools/native/gen_platform_symbols.py).
+
+--- a/src/fragments/battle_engine/battle_engine_move_animation.c
++++ b/src/fragments/battle_engine/battle_engine_move_animation.c
+@@ -31,7 sha256=1951a20ca1b000bb096393bf80ada68497035355cc2e821e2eacf5b3dff42d97 @@
+=3
+-1
++/* PORT: one slot more than the loops use (they all run to 7). The callbacks write `sBattleSceneStateTickSlots[sBattleSceneStateTickSlotIndex].callback`
++ * to retire themselves, using the loop counter of BattleScene_TickStateCallbacks; when such a callback runs with the counter at 7 (after the loop, or
++ * re-entrantly; the exact path was not traced) the write lands one slot past the array. On the console that slot is the (never read) variable
++ * D_843900A4 (symbol_addrs: the array ends at 0x843900A0, the index lives at 0x843900A0, D_843900A4 follows), so it did no harm. On the port the
++ * linker puts a different variable there (found by running the game: sActivePokemon[1] was overwritten with a function address, crash in
++ * BattleScene_TickStateCallbacks). The extra slot takes the write. */
++static BattleSceneStateTickSlot sBattleSceneStateTickSlots[7 + 1];
+=3

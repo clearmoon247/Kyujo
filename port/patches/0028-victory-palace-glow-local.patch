@@ -1,0 +1,23 @@
+Port patch 0028 - Victory Palace (Hall of Fame gallery): the pillar-glow callback overwrote its own local variable and then wrote into a random byte
+Why: reported by the user on Batocera (Linux) and Windows: the program crashes when the Hall of Fame (Victory Palace) gallery is browsed on a fresh save. Reproduced on Linux 32-bit
+(scripted: Area Select -> Pokemon Stadium -> down, left -> A, then scrolling): SIGSEGV in strlen() called by sprintf() in func_81003A54 (the digit/glyph display-list builder), whose %s
+pointer, Text_GetString(table, D_800AF770[effectSlot % 5]), was garbage because D_800AF770[0] held 0x99 (153), not a species number.
+Cause: VictoryPalace_UpdateLeftPillarGlow declares `s16 sp30; // purposely the wrong type to fix the stack, should be f32` and passes &sp30 as the f32* `euclidean` argument of
+Vec3f_CalculateDistanceAngles, which stores 4 bytes. On the console the extra two bytes fall into unused stack padding (that is why the decomp kept the wrong type: it matches the compiler's
+stack). Natively clang places the next local, `s16 idx` (the index into D_800AF770 that the function adds to the array address), right behind sp30, so the float's low bytes overwrite it;
+idx became garbage, `ptr = &D_800AF770[idx]` pointed to an arbitrary byte, and the glow value (0..255, written every frame through ptr) was stored there. A gdb watch on D_800AF770[0]
+showed the writer: VictoryPalace_UpdateLeftPillarGlow, values 0x33, 0x66, 0x99, 0xCC, 0xFF (the glow steps). A fresh save is just the case where the bug is visible at once (the corrupted byte
+was one the gallery reads); on any save the function wrote through a wrong pointer.
+How: sp30 is declared f32 (its real type). No other change. The other callers of Vec3f_CalculateDistanceAngles in the decomp were checked: their third argument is f32 (gallery.c,
+demo_scenes_165640.c, battle_engine_*), so this is the only instance of the pattern.
+Checked on Linux: see docs/known-decomp-issues.md (the same scripted route no longer crashes).
+
+Files: `src/fragments/victory_palace/victory_palace.c`
+
+--- a/src/fragments/victory_palace/victory_palace.c
++++ b/src/fragments/victory_palace/victory_palace.c
+@@ -1766,7 sha256=caba26c0d3a71c71c978cced5b3e47a68c1f8b0fa786f153059cd931f134cce6 @@
+=3
+-1
++    f32 sp30; /* PORT (patch 0028): the real type; the decomp's s16 (kept to match the console's stack) let Vec3f_CalculateDistanceAngles write 4 bytes over the next local */
+=3

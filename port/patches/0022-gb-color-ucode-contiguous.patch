@@ -1,0 +1,39 @@
+Port patch 0022 - keep the Game Boy Color RSP program and its constants back to back
+Why: Pokemon Yellow is a Game Boy Color cartridge (header byte 0x143 has bit 7 set), so GB Tower runs it with the colour RSP program D_812297C0.
+The program (633 words, 0x9E4 bytes) does not carry its constants: at IMEM 0x074 it DMAs 0xB0 bytes into DMEM from "ucode_boot + 0x9F0" (the
+word at DMEM 0xFC8 is the ucode_boot pointer). On the console the linker puts the constants array D_8122A1A4 directly after the program (the
+decomp even computes the program size as D_8122A1A4 - D_812297C0 = 0x9E4), so ucode_boot + 0x9F0 is the first non-zero constant (0x01010202;
+the array starts with three zero words).
+A native linker aligns each array to 8 bytes, so D_8122A1A4 sat at +0x9E8 and the program read its constants 4 bytes too early: all colour masks and
+shift factors were wrong, and Yellow's picture came out as raw colour values (flat blue, striped olive sprites).
+The patch makes the program and the constants ONE array (633 + 47 words, no gap) and keeps the name D_8122A1A4 as a macro for the start of the
+constants, so the size calculation still gives 0x9E4. The black-and-white program (D_8122A260, 0xA40 bytes, constants read at + 0xA40) needs no
+change because 0xA40 is a multiple of 8; that is why Red and Blue were never affected.
+How it was found: the dumped program was disassembled by hand (tools: a small RSP decoder in the session scratch area); the DMA source offset 0x9F0
+and the 0x9E4 + 12 relation were compared with the addresses in the built program (D_8122A1A4 - D_812297C0 = 0x9E8 there).
+This is the seventh case of the program relying on the console's link layout (see 0017, 0018, 0020, 0021 and the aliases in
+tools/native/gen_platform_symbols.py); it is a layout assumption made by RSP code, not by the C code.
+
+--- a/src/fragments/gb_tower_emulator/gb_tower_emulator_7F9A0.c
++++ b/src/fragments/gb_tower_emulator/gb_tower_emulator_7F9A0.c
+@@ -78,7 sha256=0b90e7261c44453129e5618ce619cf949a63e765e1b6716dc03d42eeed185a09 @@
+=3
+-1
++/* PORT (patch 0022): the colour (Game Boy Color) RSP program and its constants must lie back to back. The program itself fetches its
++ * constants from "program start + 0x9F0" (its DMA at IMEM 0x074 loads 0xB0 bytes from ucode_boot + 0x9F0), and on the console the linker
++ * places D_8122A1A4 exactly 0x9E4 bytes (the program's size) after D_812297C0, so +0x9F0 is the first non-zero constant (0x01010202). A native
++ * linker pads the 0x9E4-byte program to 8 bytes, which moved the constants 4 bytes and made every colour mask wrong (Pokemon Yellow, the
++ * only colour cartridge, showed a flat blue screen). Both parts are therefore ONE array here, the data following the program with no gap.
++ * D_8122A1A4 stays usable by name as the start of the data. (The black-and-white program's data, D_8122ACA0, needs no such change: its
++ * program is 0xA40 bytes, a multiple of 8, and the program reads it at + 0xA40.) */
++const u32 D_812297C0[0x279 + 0x2F] = {
+=3
+@@ -185,9 sha256=68118c0e67b0cce518a4e66a4af2354e064372aa7b1d9d35ff5a7c5c91435250 @@
+=3
+-3
++    /* ---- end of the program (0x279 words); the constants follow at once (this was D_8122A1A4) ---- */
+=3
+@@ -197,6 sha256=d2b9a3e224cc9959de3d912b14c8763268eda42fe7cb9e5a5a2b55d79d8f163a @@
+=3
++#define D_8122A1A4 (D_812297C0 + 0x279) /* PORT (patch 0022): start of the constants */
+=3

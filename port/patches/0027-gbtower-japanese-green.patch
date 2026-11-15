@@ -1,0 +1,41 @@
+Port patch 0027 - GB Tower: accept the Japanese Pocket Monsters Midori (Green) cartridge
+Why: the user wants to play their real Japanese Pokemon Green cartridge (Midori) in the US Stadium's GB Tower. The US game knows the title "POKEMON GREEN" but its entry in
+the emulator's cartridge-title table (D_8120DD2C) is disabled (its last two bytes are FF FF); Midori itself is a different, smaller cartridge (512 KiB, MBC1) that
+the host layer adapts to the layout the Stadium expects (src/platform/host_gbjp.c).
+How: (1) the last two bytes of the 16-byte GREEN title entry become 00 00: GbPak_DetectSupportedCartridgeVariant compares all 0x10 bytes of the cartridge's header title with the entry, Midori's title is "POKEMON GREEN" padded with zeros (checked in the ROM), and the FF FF of the original entry can never match it, so variant 2 was never accepted. (2) The emulator's start-up (the function that follows the first service-thread round) also refuses variant 2 by name, because no Green ever came with a US Stadium; that refusal is removed (variant 0, an unknown cartridge, is still refused). The Stadium's table of known ROM checksums covers only Red, Blue and Yellow, so a Green takes the generic path: the whole 1 MiB ROM is read and its checksum verified.
+(3) The emulator's cartridge service thread (func_81200AA8) tells the host layer, for the whole of each job it carries out (__osHostGbPakRawRam), that it needs the cartridge's REAL
+save RAM: loading the ROM and the game's save, writing the game's save back, and its probe blocks (patterns it writes into the save RAM and later verifies) all belong to the Game Boy
+emulator itself. The Stadium's own save code (gb_tower.c, GbPak_MbcRead/Write, which never runs at the same time) keeps seeing the international-layout copy of the Japanese save that
+the host builds, and its writes never reach the Japanese .sav. For a non-Japanese cartridge the call does nothing.
+Checked by a Linux run with the Midori ROM and a copy of the user's real save (see docs/windows-test-guide.md, Test 13).
+
+--- a/src/fragments/gb_tower_emulator/gb_tower_emulator_7F9A0.c
++++ b/src/fragments/gb_tower_emulator/gb_tower_emulator_7F9A0.c
+@@ -424,7 sha256=493f91ffd73edc39b1be579728c4fa89e3c2cdb9dada3e43cebd8d1adc22d3ec @@
+=3
+-1
++    0x4E, 0x00, 0x00, 0x00, 0x50, 0x4F, 0x4B, 0x45, 0x4D, 0x4F, 0x4E, 0x20, 0x42, 0x4C, 0x55, 0x45,
+=3
+@@ -1182,6 sha256=a13d7c11c89c1e626841a3225520323f338a78cd9f918047f8353a9c6e9628b9 @@
+=3
++extern void __osHostGbPakRawRam(s32 channel, s32 on);   /* PORT (patch 0027): src/platform/host_gbpak.c */
++
+=3
+@@ -1206,6 sha256=7fd38c602956964c7390b3270f7342c96877f2725470dac545dba3fb619b813f @@
+=3
++        /* PORT (patch 0027): everything this thread does to the cartridge is the Game Boy emulator's own access (loading the ROM, the game's
++         * save RAM and its probe blocks). A Japanese cartridge must give it the real save, while the Stadium's own save code (gb_tower.c, which
++         * never runs at the same time) is shown an international-layout copy; see src/platform/host_gbjp.c. For other cartridges this does nothing. */
++        __osHostGbPakRawRam((s32)emu->unk_5DCC, 1);
+=3
+@@ -1408,6 sha256=e21822f2ce40a9f5f77cb52de60d2c39c808fc2bec5ed98c5ac28074e8606364 @@
+=3
++        __osHostGbPakRawRam((s32)emu->unk_5DCC, 0);     /* before the busy flag is cleared: the next access may be the Stadium's own */
+=3
+@@ -2227,7 sha256=1d5aae898d3fc5c68858fe4bba6e6df3647f22f87d4b1e2be0c6c69c0c78dced @@
+=3
+-1
++        /* PORT (patch 0027): the US game refuses variant 2 (POKEMON GREEN) here, as it never shipped with a US Stadium; the Japanese Pocket Monsters
++         * Midori (adapted by src/platform/host_gbjp.c) is accepted. Variant 0 (not a known cartridge) is still refused. */
++        if (emu->unk_5DC5 == 0) {
+=3

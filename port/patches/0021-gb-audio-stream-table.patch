@@ -1,0 +1,33 @@
+Port patch 0021 - make the GB Tower sound-effect stream table a real pointer table
+Why: GB Tower plays short sampled sound effects through func_81209374, which looks the sample data up in a table (D_81228654, nine entries).
+The decomp holds that table as a byte array whose bytes are the console's link-time addresses of the sample arrays (0x8120EB94 and so on). That
+works on the console only because the console linker placed the arrays at exactly those addresses. In the native program the arrays are
+elsewhere, so the first sound effect (found by pressing B and then C-Up in Pokemon Red inside GB Tower) made the player read from 0x8122864C
+and crash with a segmentation fault. The patch writes the table as pointers to the arrays by name, in the original order.
+The original numbers were checked before rewriting: entries 0 and 1 are the 8-byte zero array D_8122864C, entries 2..8 are seven chunks of one
+sample area whose sizes (table D_81228678) added to each address give the next address (0x8120EB94 + 0x6B40 = 0x812156D4, and so on), so the entry
+-> array assignment is not a guess. The table keeps its size on a 32-bit build (9 x 4 = 0x24 bytes).
+This is the sixth case of the program relying on the console's link layout (see 0017, 0018, 0020 and the aliases in tools/native/gen_platform_symbols.py);
+it is the first one where the layout was baked into DATA as raw address bytes. Other data tables of that kind may exist: a search for byte
+tables that look like address lists found none in a first pass (the search was a rough pattern and is NOT exhaustive).
+
+--- a/src/fragments/gb_tower_emulator/gb_tower_emulator_86CB0.c
++++ b/src/fragments/gb_tower_emulator/gb_tower_emulator_86CB0.c
+@@ -7347,24 sha256=91ad22738d250746a1ade850ccefe9d357fd61294e33ae13775ac76bb0eaa504 @@
+=3
+-18
++/* PORT (patch 0021): the console build stores these nine pointers as RAW BYTES holding link-time addresses (0x8120EB94 ...), which only
++ * point at the sample arrays because the console linker put them there. The native program's arrays are elsewhere, so the stream player
++ * (func_81209374) crashed on the first sound effect. A real pointer table follows the arrays by name. Entries are the ones of the
++ * unversioned (US) build in the original table, in the same order: entries 0 and 1 are the 8-byte zero array D_8122864C, 2..8 are the
++ * seven sample chunks whose sizes are in D_81228678 (0x6B40, 0x5AF0, 0x28D0, 0x1AE0, 0x4190, 0x3260, 0x1CE0). The original numbers were
++ * checked: each chunk's address plus its size is the next chunk's address (0x8120EB94 + 0x6B40 = 0x812156D4 ...). */
++s8* D_81228654[9] = {
++    (s8*)D_8122864C, (s8*)D_8122864C, (s8*)D_8120EB94, (s8*)D_812156D4, (s8*)D_8121B1C4,
++    (s8*)D_8121DA94, (s8*)D_8121F574, (s8*)D_81223704, (s8*)D_81226964,
+=3
+@@ -7372,7 sha256=5d33d30438f54ea74f07182a913eee78f7ac2f21ad455dd53055e3d80d76ed03 @@
+=3
+-1
++#define GB_AUDIO_STREAM_DATA D_81228654
+=3

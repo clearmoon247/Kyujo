@@ -1,0 +1,37 @@
+Port patch 0039 - cheat: the Hall of Fame can be shown complete (all 151 Pokemon), which plays the completion scene
+Why: a requested feature of the port (an option in the Options menu, off by default; KYUJO_CHEAT_HOF=1 for one run). The Hall of Fame (Victory Palace) lists a Pokemon only when the save holds a
+record for it (VictoryPalace_LoadSpeciesRecord reads typed record 0x13, one per species); VictoryPalace_CheckAllCaught plays the completion scene (State_VictoryPalace -> Stage_RunDemoScene(0x1A)) when
+all 151 are present and the "seen it" flag (Save_GetOptionsField1F) is not set yet. Collecting all 151 takes a very long time, so with the cheat switched on a species WITHOUT a record gets one that
+is made up in memory when it is asked for: the first cup (unk_00 = 1), level 50, ID 00000, the species name as the nickname (Text_CopySpeciesName) and the player's own name as the trainer
+(Text_GetPlayerLabel(1)), so the gallery shows it as the player's. Real records are never replaced, nothing is written to the save by this function: switching the cheat off shows the real Hall again.
+(What the real game then does is unchanged: after the completion scene it stores its own "seen" flag and the chosen Pokemon in the save, as it does after a genuine completion.)
+The host decides (__osHostCheatOption(1), host_cheat.c).
+Files: `src/pokemon_stats.c`
+
+--- a/src/pokemon_stats.c
++++ b/src/pokemon_stats.c
+@@ -5,6 sha256=5745016d260d35d0f76c79e607c4520c9c2b69ebde6164d711d3b4bacaca6f0a @@
+=3
++
++extern int __osHostCheatOption(int which); /* PORT (patch 0039): the host's cheat switches (1 = Hall of Fame complete) */
+=3
+@@ -238,6 sha256=641f4689f08d15e42847ce287c34ac9a42d13d9ee11beea8ccce19d67fd096b8 @@
+=3
++    } else if ((arg1 >= 1) && (arg1 <= 151) && __osHostCheatOption(1)) {
++        /* PORT (patch 0039): the "Hall of Fame complete" cheat. A species that has no record gets one that is made up here (not saved):
++         * the first cup, level 50, ID 00000, the species name as nickname and the player's own name as the trainer, so the gallery shows
++         * every Pokemon as the player's, and entering the Hall with all 151 present plays the same completion scene as the real thing. */
++        char* owner = Text_GetPlayerLabel(1);
++        s32 i;
++
++        arg0->unk_00 = 1;
++        arg0->unk_01 = 50;
++        arg0->unk_02 = 0;
++        Text_CopySpeciesName(arg0->unk_04, arg1);
++        arg0->unk_04[15] = 0;
++        for (i = 0; (i < 15) && (owner[i] != 0); i++) {
++            arg0->unk_14[i] = owner[i];
++        }
++        arg0->unk_14[i] = 0;
++        var_v1 = 1;
+=3

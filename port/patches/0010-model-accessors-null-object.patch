@@ -1,0 +1,31 @@
+Port patch 0010 - model accessors that read low memory when no object is being drawn
+Why: ModelRenderer_GetActiveMode / GetObjectType (src/battle_hud.c) read fields of the display object D_8006F09C. It is NULL except
+while an object is drawn, and the callbacks of a geo layout run once when the layout is built (GeoNode_SetCallback calls
+callback(0, node)), before any drawing. The console then reads a small offset of segment 0 (0xA6 for GetActiveMode), which maps to the start of
+RDRAM (Memmap_SetSegmentMap(0, 0x80000000, osMemSize), src/stage_loader.c): memory that holds no game data. This port gives game
+code no memory at such low addresses, so the read crashed (found by running the game). The value is not used in the cases that reach it
+(the callback only uses it when its first argument is 2), so both accessors return 0 for NULL.
+
+--- a/src/battle_hud.c
++++ b/src/battle_hud.c
+@@ -128,13 sha256=10297ee96f797a3f4d0d8e1dd32a69d0b2d35ac317156884adfc77b2011b75ce @@
+=3
+-1
++    u8 ret;
++
++    /* PORT: with no display object being drawn (D_8006F09C == NULL) the console reads byte 0xA6 of segment 0, i.e. of the start of
++     * RDRAM (a low-memory byte that is not part of the game's data). Natively there is no memory at that address; 0 is used. */
++    if (D_8006F09C == NULL) {
++        return 0;
++    }
++    ret = *(u8*)Memmap_GetSegmentVaddr(&D_8006F09C->effectSlot);
+=5
+-1
++    s16 ret;
++
++    /* PORT: same as ModelRenderer_GetActiveMode above. */
++    if (D_8006F09C == NULL) {
++        return 0;
++    }
++    ret = *(s16*)Util_ConvertAddrToVirtAddr(&D_8006F09C->objectType);
+=3

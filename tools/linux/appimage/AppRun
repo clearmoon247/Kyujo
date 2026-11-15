@@ -1,0 +1,43 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Dan B. Cooper
+# Kyujo: start script inside the AppImage.
+# The AppImage is read-only, so everything the game writes (settings, log, saves, screenshots) goes to a data folder:
+#   $KYUJO_HOME if set, else $XDG_DATA_HOME/Kyujo, else ~/.local/share/Kyujo.
+# Your own game ROM is NOT inside: put it (a *.z64 / *.n64 / *.v64 file) into the data folder or next to the AppImage.
+HERE="$(dirname "$(readlink -f "$0")")"
+DATA="${KYUJO_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/Kyujo}"
+mkdir -p "$DATA" || { echo "cannot create $DATA" >&2; exit 1; }
+export KYUJO_HOME="$DATA"
+cd "$DATA" || exit 1
+[ -n "$DISPLAY" ] || export DISPLAY=:0.0
+
+say() {      # a message a person without a terminal sees: zenity / kdialog / xmessage when present, and always stderr
+    echo "$1" >&2
+    if command -v zenity >/dev/null 2>&1; then zenity --error --no-markup --text="$1" 2>/dev/null
+    elif command -v kdialog >/dev/null 2>&1; then kdialog --error "$1" 2>/dev/null
+    elif command -v xmessage >/dev/null 2>&1; then xmessage -center "$1" 2>/dev/null; fi
+}
+
+ARGS=()
+if [ ! -f kyujo.cfg ] || ! grep -q '^game_rom=.\+' kyujo.cfg; then
+    for d in "$DATA" "${OWD:-.}" "$(dirname "${APPIMAGE:-$0}")"; do
+        for f in "$d"/*.z64 "$d"/*.n64 "$d"/*.v64 "$d"/*.Z64 "$d"/*.N64 "$d"/*.V64; do
+            if [ -f "$f" ]; then ARGS+=(--rom "$f"); break 2; fi
+        done
+    done
+fi
+case "$1" in
+    --probe) shift; exec "$HERE/usr/bin/kyujo_probe" "$@" ;;
+    --data-folder) echo "$DATA"; exit 0 ;;
+esac
+
+[ -f kyujo.log ] && mv -f kyujo.log kyujo.log.old
+"$HERE/usr/bin/kyujo" "${ARGS[@]}" "$@" > kyujo.log 2>&1
+rc=$?
+if [ $rc -eq 2 ]; then
+    say "Kyujo needs your own copy of Pokemon Stadium (USA), a ROM file (.z64, .n64 or .v64).
+Copy it into this folder and start again:
+$DATA"
+fi
+exit $rc

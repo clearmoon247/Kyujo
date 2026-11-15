@@ -1,0 +1,74 @@
+Port patch 0029 - move tester hook: lets the host replace the first player's lead Pokemon (species and its single move) and the opponent's lead species
+Why: a requested development feature of the port, the "Move animation test" page (docs/move-trace.md), which must show any move on any Pokemon with the call trace on, to
+debug move animations (Night Shade, Fire Blast). Doing it inside the game's own setup (as patch 0026 does for the cheat) keeps the game's state consistent; the host does not poke at memory from outside.
+How: Memmap_SetFragmentMap (memmap.c) runs when a code overlay has been loaded; for the battle engine (fragment id 51: ((0x84300000 & 0x0FF00000) >> 20) - 0x10) it calls Port_ApplyMoveTest, which asks the host
+(__osHostMoveTestValue) whether the tester is armed and, if so, writes the species (BattleMon byte 0x00), the one move (bytes 0x09..0x0C, other slots empty) and 40 PP (0x20..0x23) into pokemonPicked[0] and the roster's own
+copy (rosterInfo->unk_028[0]) of side 0, and the opponent's lead species into side 1. Byte offsets are those the team's battle cross-check (xcheck) patches in the same place; the fields are bytes, so the
+port's big-endian game memory needs no swapping. When the tester is not armed nothing changes.
+Not yet verified by a scripted battle when this text was written (see the commit that adds host_movetest.c).
+
+(This patch is made against the file as patch 0011 leaves it; apply it after 0011.)
+
+--- a/src/memmap.c
++++ b/src/memmap.c
+@@ -1,5 sha256=4f599b12433421a8745692c3e0bcc295fbd7280a201a7239e2d3a677063fceaf @@
+=2
++#include "game_state.h" /* PORT (patch 0029): TeamRoster, BattleMon, gSessionContext */
+=3
+@@ -162,9 sha256=992ffa94167e3c9fada884faf684e58250349825b24624812b6467422303e8e4 @@
+=3
++/* PORT (patch 0029): the move tester (host_movetest.c). Memmap_SetFragmentMap runs when a code overlay has just been loaded; for the battle engine
++ * that is after the two teams have been built and before the battle reads them. The host (the "Move animation test" page of the menu) may ask for
++ * the first player's lead Pokemon to be another species that knows only one chosen move, and for the opponent's lead to be another species, so that
++ * any move can be watched on any Pokemon. Offsets as in game_state.h: BattleMon 0x00 species, 0x09..0x0C moves, 0x20..0x23 PP. */
++#define PORT_BATTLE_ENGINE_FRAGMENT_ID 51 /* FRAGMENT_ID(FRAGMENT_BATTLE_ENGINE): ((0x84300000 & 0x0FF00000) >> 20) - 0x10 */
++extern int __osHostMoveTestValue(int which);   /* 0: tester armed (1/0), 1: player species, 2: player move, 3: opponent species (0 = unchanged) */
++extern void __osHostMoveTestNotice(int applied);
++
++static void Port_ApplyMoveTestToMon(BattleMon* mon, int species, int move) {
++    if (mon == NULL) {
++        return;
++    }
++    if (species != 0) {
++        mon->unk_00.unk_00 = species;
++    }
++    if (move != 0) {
++        mon->unk_09[0] = move;
++        mon->unk_09[1] = 0;
++        mon->unk_09[2] = 0;
++        mon->unk_09[3] = 0;
++        mon->unk_20[0] = 40; /* enough PP for any test */
++        mon->unk_20[1] = 0;
++        mon->unk_20[2] = 0;
++        mon->unk_20[3] = 0;
++    }
++}
++
++static void Port_ApplyMoveTest(void) {
++    s32 side;
++    int species;
++    int move;
++
++    if (__osHostMoveTestValue(0) == 0) {
++        return;
++    }
++    for (side = 0; side < 2; side++) {
++        TeamRoster* roster = gSessionContext.battleSides[side].teamMember[0];
++        if (roster == NULL) {
++            continue;
++        }
++        species = __osHostMoveTestValue(side == 0 ? 1 : 3);
++        move = side == 0 ? __osHostMoveTestValue(2) : 0;
++        Port_ApplyMoveTestToMon(&roster->pokemonPicked[0], species, move); /* the lead: the first Pokemon picked */
++        if (roster->rosterInfo != NULL) {
++            Port_ApplyMoveTestToMon(&roster->rosterInfo->unk_028[0], species, move); /* the roster's own copy */
++        }
++    }
++    __osHostMoveTestNotice(1);
++}
++
+=3
++    if (id == PORT_BATTLE_ENGINE_FRAGMENT_ID) { /* PORT (patch 0029) */
++        Port_ApplyMoveTest();
++    }
+=3

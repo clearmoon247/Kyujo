@@ -1,0 +1,30 @@
+Port patch 0008 - native addresses are their own "KSEG0" addresses
+Why: on the console a physical address and its virtual (KSEG0) address differ by 0x80000000, and the game converts between them with
+that constant. In this port a pointer IS the address the emulated hardware uses (src/ultra/os_memmap.c: osVirtualToPhysical is the
+identity), so adding 0x80000000 would turn a valid pointer into one that cannot be dereferenced.
+  - src/util.c Util_ConvertAddrToVirtAddr: the "physical address" branch returns the address unchanged instead of OR-ing in 0x80000000.
+  - src/stage_loader.c: segment 0 ("physical memory", used by display lists) is based at 0 instead of 0x80000000, so the display-list
+    word for segment 0 is the plain address, as osVirtualToPhysical would give.
+  - src/3D140.c Audio_CreateFrameTask: reads the audio length register through IO_READ (HW_REG, patch 0007, cannot reach hardware).
+Note: this patch is made against the tree that patches 0001-0007 produce (it touches src/util.c, which patch 0006 also changes).
+--- a/src/3D140.c
++++ b/src/3D140.c
+@@ -362,7 sha256=963988b23367c2c01c7511016937fed9d7f8bf6e38f95e65c4fa1a3d77211766 @@
+=3
+-1
++    samplesLeft = IO_READ(AI_LEN_REG) >> 2; // PORT: the audio interface is emulated (src/ultra/hw_ai.c)
+=3
+--- a/src/util.c
++++ b/src/util.c
+@@ -25,7 sha256=6cca1616baa9dbb3b46cf85aec1cf4e112563a4f2252b2579f93ff357d4e67dd @@
+=3
+-1
++        retaddr = addr; // PORT: a physical address and a virtual address are the same value here (osPhysicalToVirtual is the identity)
+=3
+--- a/src/stage_loader.c
++++ b/src/stage_loader.c
+@@ -316,7 sha256=502062c2837a56f2429982db74d39f31b93afe88ebd408e72fa705c55d564e4b @@
+=3
+-1
++    Memmap_SetSegmentMap(0, 0, osMemSize); // PORT: segment 0 (physical memory) starts at 0 in both views; see util.c
+=3

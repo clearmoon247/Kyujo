@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- Copyright (C) 2026 Dan B. Cooper -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.kyujo.app"
+    android:installLocation="internalOnly">
+
+    <!-- OpenGL ES 3.0 is what the GPU renderer needs; no permission is asked for: the ROM, the saves and the log live in the app's own folder, and files are moved in and out with
+         the system's file picker (a document the player chooses). -->
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+
+    <application
+        android:label="Kyujo"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:hasCode="true"
+        android:extractNativeLibs="true"
+        android:isGame="true"
+        android:resizeableActivity="false"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <activity
+            android:name="org.kyujo.app.LauncherActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name="org.kyujo.app.GameActivity"
+            android:exported="false"
+            android:process=":game"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode|density|navigation|layoutDirection|locale|fontScale|colorMode" />
+    </application>
+</manifest>

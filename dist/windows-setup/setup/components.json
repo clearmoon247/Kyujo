@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "comment": "The programs the setup needs besides this kit's own files. Each is looked for in the 'downloads' folder first; the online edition downloads what is missing, the offline edition ships them. A download is used only if its SHA-256 matches. The decomp is not hashed as one file (GitHub's zip is not byte-stable): its files are checked one by one against app/port/decomp-manifest.txt.",
+  "toolchain": {
+    "title": "Compiler and Python (llvm-mingw 20240619: clang 18.1.8, lld, mingw-w64 headers and libraries, Python 3.11)",
+    "file": "llvm-mingw-20240619-ucrt-x86_64.zip",
+    "url": "https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-x86_64.zip",
+    "sha256": "810703594a7e3eea03385b5329c7ea3bd65f5e496b44cf1b68c17ff436d265e7",
+    "size": 142797010,
+    "top": "llvm-mingw-20240619-ucrt-x86_64/",
+    "skip": [
+      "armv7-w64-mingw32/*", "aarch64-w64-mingw32/*", "x86_64-w64-mingw32/*", "generic-w64-mingw32/*",
+      "share/*", "bin/clangd.exe", "bin/clang-tidy.exe", "bin/lldb*", "bin/liblldb.dll"
+    ],
+    "map_comment": "In the Windows zip the C headers sit in include\\ at the top (the Linux package links i686-w64-mingw32/include to them). The build wants them in <sysroot>/include, so they are unpacked there; the C++ library headers are not needed.",
+    "map": [ { "from": "include/", "to": "i686-w64-mingw32/include/", "skip": ["include/c++/*"] } ],
+    "needs": ["bin/clang.exe", "bin/ld.lld.exe", "bin/llvm-ar.exe", "bin/llvm-nm.exe", "bin/llvm-readobj.exe", "bin/llvm-rc.exe", "python/bin/python.exe",
+              "i686-w64-mingw32/lib/crt2.o", "i686-w64-mingw32/include/stdio.h", "i686-w64-mingw32/include/windows.h",
+              "lib/clang/18/include/stddef.h", "lib/clang/18/lib/windows/libclang_rt.builtins-i386.a"],
+    "licence": "Apache-2.0 with LLVM exception (LLVM), ZPL/public domain/BSD (mingw-w64), PSF (Python). Their licence texts are inside the zip."
+  },
+  "decomp": {
+    "title": "The game's source code (the kyujo decompilation, pinned commit)",
+    "local_names": ["{download_name}", "decomp-{commit}-build-files.zip"],
+    "download_name": "pokestadium-{commit}.zip",
+    "url": "{source}/archive/{commit}.zip"
+  }
+}

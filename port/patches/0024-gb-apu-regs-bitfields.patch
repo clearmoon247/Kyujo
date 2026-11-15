@@ -1,0 +1,217 @@
+Port patch 0024 - read the Game Boy sound registers with shifts and masks instead of C bit-fields
+Why: the Game Boy Tower (Transfer Pak emulator) was SILENT natively. The emulator keeps the Game Boy sound registers NR10..NR52 in the byte array
+D_8120EA70 and the decomp reads them through a struct of bit-fields (GbApuRegs, GB_APU_REGS.power and so on). The MIPS compiler puts the first
+declared bit-field in the most significant bits of a byte, the x86 compilers in the least significant, so every field read the wrong bits. In
+particular ".power" (bit 7 of NR52) read bit 0, which is 0 after the game's own register writes, and func_8120806C then ignored every sound
+register write because it believed the sound hardware was off. Measured on Linux: register writes with real values reached func_8120806C, yet
+every buffer passed to osGbSetNextBuffer was all zeros.
+The patch replaces the struct with one accessor macro per field (shift and mask on the byte that holds it). The positions come from clang's
+record layout of the ORIGINAL struct for MIPS o32 big-endian and match the documented Game Boy register layout (see the comment in the patch).
+All 68 uses in the file were reads, so only reading macros exist. This patch applies on top of 0021 (same file). The file no longer needs an
+entry in port/bitfield_known.txt (the build refuses bit-fields in files that are not listed).
+Not checked: the sound itself has still not been LISTENED to; only that the synthesised buffers are no longer silent (see docs/test-checklist.md).
+
+--- a/src/fragments/gb_tower_emulator/gb_tower_emulator_86CB0.c
++++ b/src/fragments/gb_tower_emulator/gb_tower_emulator_86CB0.c
+@@ -59,75 sha256=1547724d1c9f3c90e4eae7c66bdb2780b4dda2e7e77bedc771e82f80b9db9edb @@
+=3
+-69
++/* PORT (patch 0024): the console build described the Game Boy sound registers NR10..NR52 (mirrored in D_8120EA70, indexed by
++ * register address - 0xFF10) as a struct of C bit-fields (GbApuRegs, 0x18 bytes) and read them as GB_APU_REGS.<field>. The
++ * MIPS compiler places the FIRST declared bit-field in the MOST significant bits of a byte; the x86 compilers used for the
++ * native build place it in the LEAST significant bits. So natively every field read the wrong bits (for example "power", meant to
++ * be bit 7 of NR52, read bit 0), the emulator thought the sound hardware was switched off and ignored every register write:
++ * the Game Boy Tower produced silence.
++ * The accessors below take each field from the byte it lives in with an explicit shift and mask. The positions are the
++ * MIPS o32 big-endian layout of the original struct as computed by clang (--target=mips-linux-gnu -fdump-record-layouts-simple)
++ * and agree with the documented Game Boy register layout (Pan Docs: NR10 = bits 6-4 sweep time, bit 3 direction, bits 2-0 shift;
++ * NR11 = bits 7-6 duty, bits 5-0 length; NR12 = bits 7-4 volume, bit 3 direction, bits 2-0 period; NR14 = bit 7 trigger, bit 6
++ * length enable, bits 2-0 frequency high; NR43 = bits 7-4 clock shift, bit 3 width, bits 2-0 divisor; NR50 = bit 7 VIN left,
++ * bits 6-4 left volume, bit 3 VIN right, bits 2-0 right volume; NR51 = one bit per channel, noise/wave/sq2/sq1 left then right;
++ * NR52 = bit 7 power). Every use in this file is a READ, so only reading macros are needed.
++ * GB_APU_BITS(byte, shift, mask) = (D_8120EA70[byte] >> shift) & mask. The fields (byte = offset in D_8120EA70) are: */
++#define GB_APU_BITS(byte, shift, mask) (((u32)D_8120EA70[(byte)] >> (shift)) & (mask))
++#define GB_APU_sweepTime   GB_APU_BITS(0x00, 4, 0x7) /* NR10 */
++#define GB_APU_sweepDir    GB_APU_BITS(0x00, 3, 0x1) /* NR10 */
++#define GB_APU_sweepShift  GB_APU_BITS(0x00, 0, 0x7) /* NR10 */
++#define GB_APU_duty1       GB_APU_BITS(0x01, 6, 0x3) /* NR11 */
++#define GB_APU_length1     GB_APU_BITS(0x01, 0, 0x3F) /* NR11 */
++#define GB_APU_volume1     GB_APU_BITS(0x02, 4, 0xF) /* NR12 */
++#define GB_APU_envDir1     GB_APU_BITS(0x02, 3, 0x1) /* NR12 */
++#define GB_APU_envSweep1   GB_APU_BITS(0x02, 0, 0x7) /* NR12 */
++#define GB_APU_freqLo1     GB_APU_BITS(0x03, 0, 0xFF) /* NR13 */
++#define GB_APU_trigger1    GB_APU_BITS(0x04, 7, 0x1) /* NR14 */
++#define GB_APU_counter1    GB_APU_BITS(0x04, 6, 0x1) /* NR14 */
++#define GB_APU_freqHi1     GB_APU_BITS(0x04, 0, 0x7) /* NR14 */
++#define GB_APU_duty2       GB_APU_BITS(0x06, 6, 0x3) /* NR21 */
++#define GB_APU_length2     GB_APU_BITS(0x06, 0, 0x3F) /* NR21 */
++#define GB_APU_volume2     GB_APU_BITS(0x07, 4, 0xF) /* NR22 */
++#define GB_APU_envDir2     GB_APU_BITS(0x07, 3, 0x1) /* NR22 */
++#define GB_APU_envSweep2   GB_APU_BITS(0x07, 0, 0x7) /* NR22 */
++#define GB_APU_freqLo2     GB_APU_BITS(0x08, 0, 0xFF) /* NR23 */
++#define GB_APU_trigger2    GB_APU_BITS(0x09, 7, 0x1) /* NR24 */
++#define GB_APU_counter2    GB_APU_BITS(0x09, 6, 0x1) /* NR24 */
++#define GB_APU_freqHi2     GB_APU_BITS(0x09, 0, 0x7) /* NR24 */
++#define GB_APU_waveOn      GB_APU_BITS(0x0A, 7, 0x1) /* NR30 */
++#define GB_APU_length3     GB_APU_BITS(0x0B, 0, 0xFF) /* NR31 */
++#define GB_APU_level3      GB_APU_BITS(0x0C, 5, 0x3) /* NR32 */
++#define GB_APU_freqLo3     GB_APU_BITS(0x0D, 0, 0xFF) /* NR33 */
++#define GB_APU_trigger3    GB_APU_BITS(0x0E, 7, 0x1) /* NR34 */
++#define GB_APU_counter3    GB_APU_BITS(0x0E, 6, 0x1) /* NR34 */
++#define GB_APU_freqHi3     GB_APU_BITS(0x0E, 0, 0x7) /* NR34 */
++#define GB_APU_length4     GB_APU_BITS(0x10, 0, 0x3F) /* NR41 */
++#define GB_APU_volume4     GB_APU_BITS(0x11, 4, 0xF) /* NR42 */
++#define GB_APU_envDir4     GB_APU_BITS(0x11, 3, 0x1) /* NR42 */
++#define GB_APU_envSweep4   GB_APU_BITS(0x11, 0, 0x7) /* NR42 */
++#define GB_APU_shift4      GB_APU_BITS(0x12, 4, 0xF) /* NR43 */
++#define GB_APU_width4      GB_APU_BITS(0x12, 3, 0x1) /* NR43 */
++#define GB_APU_ratio4      GB_APU_BITS(0x12, 0, 0x7) /* NR43 */
++#define GB_APU_trigger4    GB_APU_BITS(0x13, 7, 0x1) /* NR44 */
++#define GB_APU_counter4    GB_APU_BITS(0x13, 6, 0x1) /* NR44 */
++#define GB_APU_vinLeft     GB_APU_BITS(0x14, 7, 0x1) /* NR50 */
++#define GB_APU_leftVolume  GB_APU_BITS(0x14, 4, 0x7) /* NR50 */
++#define GB_APU_vinRight    GB_APU_BITS(0x14, 3, 0x1) /* NR50 */
++#define GB_APU_rightVolume GB_APU_BITS(0x14, 0, 0x7) /* NR50 */
++#define GB_APU_noiseLeft   GB_APU_BITS(0x15, 7, 0x1) /* NR51 */
++#define GB_APU_waveLeft    GB_APU_BITS(0x15, 6, 0x1) /* NR51 */
++#define GB_APU_sq2Left     GB_APU_BITS(0x15, 5, 0x1) /* NR51 */
++#define GB_APU_sq1Left     GB_APU_BITS(0x15, 4, 0x1) /* NR51 */
++#define GB_APU_noiseRight  GB_APU_BITS(0x15, 3, 0x1) /* NR51 */
++#define GB_APU_waveRight   GB_APU_BITS(0x15, 2, 0x1) /* NR51 */
++#define GB_APU_sq2Right    GB_APU_BITS(0x15, 1, 0x1) /* NR51 */
++#define GB_APU_sq1Right    GB_APU_BITS(0x15, 0, 0x1) /* NR51 */
++#define GB_APU_power       GB_APU_BITS(0x16, 7, 0x1) /* NR52 */
+=3
+@@ -7377,7 sha256=a8074dc5de8e6bc83ef93191b02f7cb2d0d8a7da1008684d6ee023a260eb4271 @@
+=3
+-1
++    if ((reg < 0x24) && !GB_APU_power) {
+=3
+@@ -7385,9 sha256=723424da934d0e30c0f130917844568256ba936910f1707c9d88308b28e244fc @@
+=3
+-3
++            gGbApuSquare1.unk_34 = GB_APU_sweepTime * 400;
++            gGbApuSquare1.unk_39 = GB_APU_sweepDir;
++            gGbApuSquare1.unk_38 = GB_APU_sweepShift;
+=3
+@@ -7398,32 sha256=b3cf20ee3c840290c7f5dbc19d26d06292a3ce547801d3b36498a1adb12c6016 @@
+=3
+-2
++            gGbApuSquare1.unk_3B = GB_APU_duty1;
++            gGbApuSquare1.unk_1C = 0x40 - GB_APU_length1;
+=2
+-2
++            gGbApuSquare1.unk_21 = GB_APU_volume1;
++            if ((GB_APU_volume1 == 0) && (GB_APU_envDir1 == 0)) {
+=4
+-1
++            gGbApuSquare1.unk_10 = GB_APU_freqLo1 | (GB_APU_freqHi1 << 8);
+=3
+-2
++            gGbApuSquare1.unk_18 = GB_APU_counter1;
++            gGbApuSquare1.unk_10 = GB_APU_freqLo1 | (GB_APU_freqHi1 << 8);
+=1
+-1
++            if ((s32)GB_APU_trigger1 == 1) {
+=4
+-2
++                gGbApuSquare1.unk_2E = GB_APU_envDir1;
++                gGbApuSquare1.unk_28 = GB_APU_envSweep1 * 800;
+=1
+-1
++                if (GB_APU_power) {
+=3
+@@ -7434,60 sha256=5ef991f223c3c37f181a913c486635a1cab324db3a33afe4a37cfc7a428be67e @@
+=3
+-2
++            gGbApuSquare2.unk_3B = GB_APU_duty2;
++            gGbApuSquare2.unk_1C = 0x40 - GB_APU_length2;
+=2
+-2
++            gGbApuSquare2.unk_21 = GB_APU_volume2;
++            if ((GB_APU_volume2 == 0) && (GB_APU_envDir2 == 0)) {
+=4
+-1
++            gGbApuSquare2.unk_10 = GB_APU_freqLo2 | (GB_APU_freqHi2 << 8);
+=3
+-2
++            gGbApuSquare2.unk_18 = GB_APU_counter2;
++            gGbApuSquare2.unk_10 = GB_APU_freqLo2 | (GB_APU_freqHi2 << 8);
+=1
+-1
++            if ((s32)GB_APU_trigger2 == 1) {
+=4
+-2
++                gGbApuSquare2.unk_2E = GB_APU_envDir2;
++                gGbApuSquare2.unk_28 = GB_APU_envSweep2 * 800;
+=1
+-1
++                if (GB_APU_power) {
+=5
+-2
++            if (GB_APU_waveOn == 0) {
++                gGbApuWave.unk_00 = GB_APU_waveOn;
+=3
+-1
++            gGbApuWave.unk_1C = 0x100 - GB_APU_length3;
+=2
+-1
++            gGbApuWave.unk_21 = GB_APU_level3;
+=3
+-1
++            gGbApuWave.unk_10 = GB_APU_freqLo3 | (GB_APU_freqHi3 << 8);
+=3
+-1
++            gGbApuWave.unk_10 = GB_APU_freqLo3 | (GB_APU_freqHi3 << 8);
+=1
+-2
++            gGbApuWave.unk_18 = GB_APU_counter3;
++            if ((s32)GB_APU_trigger3 == 1) {
+=2
+-1
++                if (GB_APU_power && ((s32)GB_APU_waveOn == 1)) {
+=3
+@@ -7512,17 sha256=2c6f6bda56e14ac7bd28a32b876b51cc8009eb95a819023eaac0b69a1a0527b9 @@
+=3
+-1
++            gGbApuNoise.unk_1C = 0x40 - GB_APU_length4;
+=2
+-2
++            gGbApuNoise.unk_21 = GB_APU_volume4;
++            if ((GB_APU_volume4 == 0) && (GB_APU_envDir4 == 0)) {
+=4
+-2
++            gGbApuNoise.unk_10 = GB_APU_shift4;
++            gGbApuNoise.unk_0C = func_81207494(GB_APU_shift4, GB_APU_width4, GB_APU_ratio4);
+=3
+@@ -7537,14 sha256=8da5fb6af96aed55f5181fff65838e13d9f231da8a1460b0961495ea4c75ff12 @@
+=3
+-2
++            gGbApuNoise.unk_18 = GB_APU_counter4;
++            if ((s32)GB_APU_trigger4 == 1) {
+=5
+-1
++                switch ((s32)GB_APU_width4) {
+=3
+@@ -7556,9 sha256=bbe8df92de1bbe5040fe4e81eb7bc9c375c4cce68ccb989480f32a04d5ae3126 @@
+=3
+-3
++                gGbApuNoise.unk_2E = GB_APU_envDir4;
++                gGbApuNoise.unk_28 = GB_APU_envSweep4 * 800;
++                if (GB_APU_power) {
+=3
+@@ -7664,17 sha256=bf686a311a76a8d9981a4ccf4e9f859f252d7f853bd74079f244414519930359 @@
+=3
+-11
++        noiseL = GB_APU_noiseLeft ? noise : 0;
++        noiseR = GB_APU_noiseRight ? noise : 0;
++        waveL = GB_APU_waveLeft ? wave : 0;
++        waveR = GB_APU_waveRight ? wave : 0;
++        sq2L = GB_APU_sq2Left ? sq2 : 0;
++        sq2R = GB_APU_sq2Right ? sq2 : 0;
++        sq1L = GB_APU_sq1Left ? sq1 : 0;
++        sq1R = GB_APU_sq1Right ? sq1 : 0;
++
++        right = (sq1R + sq2R + waveR + noiseR) / (8 - GB_APU_rightVolume);
++        left = (sq1L + sq2L + waveL + noiseL) / (8 - GB_APU_leftVolume);
+=3

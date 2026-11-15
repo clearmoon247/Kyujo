@@ -1,0 +1,22 @@
+Port patch 0040 - cheat: Kids Club "Who wants to play?": Ready! can be chosen with nobody playing (computer against computer)
+Why: a requested feature of the port (an option in the Options menu, off by default; KYUJO_CHEAT_CPUVS=1 for one run). On the join screen (MiniGameSelect_PlayerJoinUpdate) each of the four
+players is a human (D_8780FA30[i] == 0, "1P") or a computer ("COM", 1); the cursor may only move from the row of players down to "Ready!" (and back) while player 1 is a human
+(D_8780FA30[0] == 0), so at least one person has to join. With the cheat on the cursor moves whatever player 1 is, so Ready! can be chosen with four computers (COM vs COM vs COM vs COM): the
+difficulty page (state 4) and the games themselves then run with computer players only (the games already handle computers for every empty seat). Everything else is unchanged; the host decides
+(__osHostCheatOption(2), host_cheat.c).
+Files: `src/fragments/minigame_select/minigame_select_27BCC0.c`
+
+--- a/src/fragments/minigame_select/minigame_select_27BCC0.c
++++ b/src/fragments/minigame_select/minigame_select_27BCC0.c
+@@ -7,6 sha256=1e29853c46e2e3c14d69757e832a9cd64a416481c1fbc409a155dbb0f9a28305 @@
+=3
++extern int __osHostCheatOption(int which); /* PORT (patch 0040): the host's cheat switches (2 = Kids Club: all four players may be computers) */
+=3
+@@ -2100,14 sha256=287745f87f54eac4095fe90bbc769b91cdd104a03210931b9210286eced8bd87 @@
+=3
+-1
++        if ((D_82508AF8->unk_04 & 0x800) && ((D_8780FA30[0] == 0) || __osHostCheatOption(2))) { // PORT (patch 0040)
+=6
+-1
++        if ((D_82508AF8->unk_04 & 0x400) && ((D_8780FA30[0] == 0) || __osHostCheatOption(2))) { // PORT (patch 0040)
+=3

@@ -1,0 +1,7 @@
+# libultra source files that are NOT compiled into the native libultra archive, because this port supplies the same functions.
+# One path per line, relative to lib/ultralib/src. Text after '#' is a comment. Read by tools/native/build_native.py.
+# Keep every entry justified: a file listed here is behaviour that is no longer the original's.
+
+libc/string.c   # strchr, strlen, memcpy: the host C library has them (linking both gives duplicate-symbol errors)
+os/virtualtophysical.c    # osVirtualToPhysical: identity on the host (src/ultra/os_memmap.c)
+os/physicaltovirtual.c    # osPhysicalToVirtual: identity on the host (src/ultra/os_memmap.c)

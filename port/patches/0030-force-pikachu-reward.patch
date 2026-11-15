@@ -1,0 +1,25 @@
+Port patch 0030 - development hook: KYUJO_FORCE_PIKACHU_REWARD=1 shows the Pikachu reward scene after the next battle
+Why: a Windows tester lost a Game Boy save and the program crashed (inside the game's scheduler) during the reward scene's save to the cartridge, after a whole Prime Cup round 2 played with a Pikachu from the Yellow cartridge.
+To investigate that on Linux without playing a cup (about 16 minutes of battles), the scene has to be reachable from an ordinary battle. The game shows it when transitionFlags has bit 0x1000 after the battle (game_state.c, State_StadiumMode area).
+How: just before that test, __osHostForcePikachuReward (host_cheat.c) is asked; it returns 1 once per program run, only when the environment variable KYUJO_FORCE_PIKACHU_REWARD is 1, and the bit is set. Without the variable nothing changes. The scene
+itself (fragment pikachu_reward) and its save (GbSave_RebuildAndWriteSave) are the game's own, unchanged.
+
+(This patch is made against the file as patch 0007 leaves it; apply it after 0007.)
+
+--- a/src/game_state.c
++++ b/src/game_state.c
+@@ -24,6 sha256=ae2dafe95480d0cce1dbae1e75759c2993a0af4869528d07c2bf52a2d4f1165d @@
+=3
++extern int __osHostForcePikachuReward(void); /* PORT (patch 0030): host_cheat.c */
++
+=3
+@@ -873,6 sha256=612c42dcbc8dacb7d9974144f3d18fcde11c559461550e5128b305c711e17314 @@
+=3
++            /* PORT (patch 0030): development only. __osHostForcePikachuReward returns 1 once when the program was started with
++             * KYUJO_FORCE_PIKACHU_REWARD=1: the Pikachu reward scene (teach Surf, then save to the cartridge) is shown after this battle even
++             * though the cup was not won with a Pikachu, so that the scene and its Game Boy save can be tested without playing a whole cup. */
++            if (__osHostForcePikachuReward()) {
++                gSessionContext.transitionFlags |= 0x1000;
++            }
++
+=3

@@ -1,0 +1,18 @@
+Port patch 0016 - do not read through an uninitialised pointer in BattleAI_SelectBestScoredMove
+Why: the function contains `sp70 = ptr->unk_57 * 0;` while the local `ptr` has not been assigned yet (`ptr = &arg0->unk_12;` comes
+a few lines later). The product is always 0 - it is a leftover of the matching process of the decomp. On the console the stale
+register presumably points somewhere readable and the result is thrown away (not checked on hardware); in the native build the pointer is whatever the stack held and the read
+crashed the game now and then, while the computer player chose a move (found by running the game: SIGSEGV, ptr == NULL, core file
+analysed with gdb). The patch assigns the value that expression always has, 0. No behaviour of the original changes.
+
+--- a/src/fragments/battle_engine/battle_engine_361050.c
++++ b/src/fragments/battle_engine/battle_engine_361050.c
+@@ -3443,7 sha256=ec7c931b116f6f0fb134563ebd3585b6b24daa6795dcc0ad513f959aee6cbd44 @@
+=3
+-1
++    /* PORT: the decomp writes `ptr->unk_57 * 0` here, but `ptr` is not assigned until the line `ptr = &arg0->unk_12;` below. The product
++     * is always 0 (the expression looks like a leftover of the matching process). On the console the read presumably hits whatever the
++     * stale register points to and its result is discarded (not checked on hardware); natively it dereferences an uninitialised pointer
++     * and crashed now and then (found by running the game: SIGSEGV, ptr == NULL). The value is 0, so assign 0. */
++    sp70 = 0;
+=3

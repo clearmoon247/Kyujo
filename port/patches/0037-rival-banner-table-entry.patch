@@ -1,0 +1,22 @@
+Port patch 0037 - Gym Leader Castle: the Rival's banner is read one entry past the end of its table (the Rival fight trapped the game)
+Why: src/fragments/battle_prep/battle_prep_397B10.c, BattlePrep_LoadBannerAssets, in the Gym Leader Castle (mode 7) takes the banner picture of the opponent
+from D_84B0FC6C[gSessionContext.modeSelection]. The table has nine entries (the eight gym leaders 0..7 and the Elite Four 8), but the Rival is
+modeSelection 9 (the function has `case 9:` for it two lines below). On the console the next array in the data, D_84B0FC90, follows D_84B0FC6C directly
+(0x84B0FC6C + 9 * 4 = 0x84B0FC90), so entry 9 read D_84B0FC90[0] = D_3048210, which is exactly the next banner picture in the sequence (the banners are
+0x15E0 bytes apart: D_303BD30, D_303D310, ... D_3046C30, and D_3046C30 + 0x15E0 = D_3048210). A native or WebAssembly link does not put the arrays back to
+back, so entry 9 was whatever the linker put there (not a picture address); BattlePrep_AdjustBannerTextureOffset then scanned that "picture" for its first
+non-empty column with a loop that moves one byte further left each round and has no end, and ran off the start of memory: in the WebAssembly build
+"Out-of-bounds access in linear memory or a table" (the Switch tester saw the game close to hbmenu when selecting the Rival after the Elite Four, round 2; a
+native build would have read garbage instead of trapping).
+The patch adds the tenth entry, D_3048210, to the table: the console's value.
+How it was found: the Linux build of the Switch core reproduced the trap with the tester's save (Elite Four won with the L+R+Z cheat, then the Rival selected);
+gdb on wasm_rt_trap gave the chain Game_Thread > Fragment_LoadAndCall > BattlePrep_RunRulesScreen > BattlePrep_ShowRoundIntro >
+BattlePrep_InitRoundIntroScene > BattlePrep_InitBannerScene > BattlePrep_LoadBannerGeoLayouts > BattlePrep_AdjustBannerTextureOffset.
+Tenth case of the program relying on the console's link layout (see 0017, 0018, 0020, 0021, 0022, 0023, 0036 and the aliases in tools/native/gen_platform_symbols.py).
+
+--- a/src/fragments/battle_prep/battle_prep_397B10.c
++++ b/src/fragments/battle_prep/battle_prep_397B10.c
+@@ -31,6 sha256=528a1e88f54fd9bb8f83d20eed08dc574939ead72414766168b3c32506ed4424 @@
+=3
++    D_3048210, /* port patch 0037: the Rival's banner (modeSelection 9), read past the end of this table on the console */
+=3

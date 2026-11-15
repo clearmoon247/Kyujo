@@ -1,0 +1,22 @@
+Port patch 0032 - development hook, part 2: make the forced Pikachu reward scene (patch 0030) find a Pikachu on the cartridge
+Why: with patch 0030 alone the scene is shown, but PikachuReward_FindPikachuOnCart finds no Pikachu in the team picked for the battle, so the scene ends without teaching Surf and without the save to the cartridge, which is where the Windows tester's crash happens (after choosing the move to replace, on "Saving").
+How: when the hook forces the scene (KYUJO_FORCE_PIKACHU_REWARD=1), the first picked Pokemon is marked as the cartridge's first eligible party Pikachu of controller port 1 (species 0x19, port 0 and box 0 in unk_52, index 0 in unk_53). Without the variable nothing changes. The scene and the save are the game's own, unchanged.
+
+(This patch is made against the file as patch 0030 leaves it; apply it after 0030.)
+
+--- a/src/game_state.c
++++ b/src/game_state.c
+@@ -879,7 sha256=71dfd2ea3fd0bc1284aa2078f5770bcb2f9930326dd6a17f913fe73ca063e2ba @@
+=3
++                TeamRoster* forceTeam = gSessionContext.battleSides[0].teamMember[0];
++
+=1
++                /* PORT (patch 0032): the scene only teaches Surf to a Pikachu that came from the cartridge (PikachuReward_FindPikachuOnCart reads
++                 * the port and box in unk_52 and the index among eligible Pikachus in unk_53 of the first Pikachu picked). Mark the first picked
++                 * Pokemon as the cartridge's first eligible party Pikachu of controller port 1 (what a cup played with it would have left). */
++                if (forceTeam != NULL && forceTeam->numberOfPokemonBrought > 0) {
++                    forceTeam->pokemonPicked[0].unk_00.unk_00 = 0x19;
++                    forceTeam->pokemonPicked[0].unk_52 = 0x00;
++                    forceTeam->pokemonPicked[0].unk_53 = 0;
++                }
+=3

@@ -1,0 +1,46 @@
+Port patch 0036 - the "Select entry Pokemon" slot table: its last two entries are one array with the first four, keep them back to back
+Why: src/fragments/rental_team_selection/rental_team_selection_2DB900.c has a table of six 14-byte slot entries (four trainer slots, then the "Registered
+Pokemon" and "Rental Only" buttons). The decomp splits it into D_84210DA0 (four entries, 56 bytes) and D_84210DD8 (the last two, 28 bytes as raw bytes),
+but the code indexes it as ONE array: D_84210DA0[4] and D_84210DA0[5] (cursor, draw positions, enabled and error flags) and as D_84210DD8[0] (the same
+memory as D_84210DA0[4].unk_00). On the console the linker puts the two back to back (0x84210DA0 + 56 = 0x84210DD8). A native linker aligns every array
+to 8 bytes (tools/native/ir_sizes.py), so 8 bytes of padding sat between them and D_84210DA0[4] and [5] were read 8 bytes off: their enabled/error flags,
+position and the pose accumulators of the two buttons were garbage (the "unk_08/unk_0A" phase counters of entry 4 overwrote what the code took for its
+position). Seen by the Switch tester: the page shows neither the Registered/Rental icons nor the cursor (both are drawn at the entry's position, which was
+nonsense), the cursor could not be moved (entry 4 counted as "not available" and entry 5 as "has an error") and a press of A on the Rental button gave
+"Save file not found." (the error flag of entry 5 was non-zero).
+The patch makes the six entries ONE array and keeps the name D_84210DD8 as a macro for the start of the last two (it is used only in this file).
+The entry data are the console's bytes: entry 4 = {1, 0, 190, 368, 76, 0, 0, 1568}, entry 5 = {1, 0, 450, 368, 100, -32768, -32768, 1504}; the viewer in
+gallery_rental_viewer_2AE1F0.c has the same table in one piece (its entry 4 has width 100, this file's raw bytes say 0x4C = 76; the raw bytes are kept).
+How it was found: a scripted run reached the page (the same picture with the software renderer, so not a drawing problem); the game memory was dumped
+while the page was idle: the live table showed entries 0..3 as expected (enabled flag 0, "no cartridge" state 1) and for entries 4 and 5 the first
+fields were float-looking values, the real fields sitting 8 bytes later (the console's data layout plus 8 bytes of padding).
+Ninth case of the program relying on the console's link layout (see 0017, 0018, 0020, 0021, 0022, 0023 and the aliases in tools/native/gen_platform_symbols.py).
+
+--- a/src/fragments/rental_team_selection/rental_team_selection_2DB900.c
++++ b/src/fragments/rental_team_selection/rental_team_selection_2DB900.c
+@@ -83,10 sha256=aec6988c9dbd8a0926c5c221bac019e39e803d411845f42cdc2ea271f9e2608b @@
+=3
++    {
++        0x01,
++        0x00,
++        190,
++        368,
++        76,
++        0,
++        0,
++        1568,
++    },
++    {
++        0x01,
++        0x00,
++        450,
++        368,
++        100,
++        -32768,
++        -32768,
++        1504,
++    },
+=1
+-3
++#define D_84210DD8 ((u8*)&D_84210DA0[4])
+=3

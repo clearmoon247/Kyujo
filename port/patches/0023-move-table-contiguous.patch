@@ -1,0 +1,40 @@
+Port patch 0023 - the move table (D_800780B4) is one table, keep its three parts back to back
+Why: src/3D140_2.c holds a table of 165 three-byte move entries (effect, power, category) and the decomp splits it into three arrays: D_800780B4 (204 bytes),
+D_80078180 (96 bytes) and D_800781E0 (196 bytes). The code does not care about the split: `moveEntry = &D_800780B4[(moveId * 3) - 3]` runs up to move 165
+(0xA5; the function rejects 0xA6 and above) and 3D140.c reads the same table as D_800780B3[n * 3]. That works on the console because its linker put the
+three arrays back to back (0x800780B4 + 204 = 0x80078180, + 96 = 0x800781E0). A native linker aligns every array to 8 bytes (tools/native/ir_sizes.py,
+raise_alignment, needed for DMA'd tables), so 4 bytes of padding were inserted after the 204-byte array and every move from number 69 on was read 4 bytes
+off (wrong effect, power and category for those moves).
+The patch makes the three parts ONE array of 496 bytes (495 bytes of table for 165 moves and one spare byte) with no gap. D_80078180 and D_800781E0 were
+not referred to by name anywhere in the decomp (checked with grep), so no alias is needed; the existing alias D_800780B3 = D_800780B4 - 1 is unchanged.
+How it was found: the array-bounds checking build (docs/known-decomp-issues.md, "Array-bounds checking") reported an index of 258 into the 204-byte array at
+3D140_2.c:2590 during a long scripted battle. Then the native addresses were compared with the console's: nm shows D_80078180 at D_800780B4 + 0xD0, the
+console at + 0xCC. Move 69's entry begins exactly at the start of D_80078180 (204 = 68 * 3) and move 100's at the start of D_800781E0 (300 = 100 * 3), which
+supports the reading that these are one table.
+Consequence: the damage/effect estimate in that function now sees the right data for moves 69..165. What it feeds (the function around 3D140_2.c:2560) was
+not traced in full; the patch fixes the data, it does not claim to have observed a changed battle.
+Eighth case of the program relying on the console's link layout (see 0017, 0018, 0020, 0021, 0022 and the aliases in tools/native/gen_platform_symbols.py).
+
+--- a/src/3D140_2.c
++++ b/src/3D140_2.c
+@@ -400,7 sha256=c845d4116bd02e91ef8d6cd68b4ff288c71dc8e5c74d2dbe8c15925d0e40d13c @@
+=3
+-1
++/* PORT (patch 0023): the move table is ONE table of 165 three-byte entries (effect, power, category; see the use
++ * &D_800780B4[(moveId * 3) - 3] below, and D_800780B3[n * 3] in 3D140.c). The decomp splits it into three arrays, at 204 and 300 bytes
++ * (D_800780B4, D_80078180, D_800781E0), and relies on the console's linker placing them back to back (0x800780B4 + 204 = 0x80078180,
++ * 0x80078180 + 96 = 0x800781E0). The native linker aligns each array to 8 bytes, which put 4 bytes of padding after the first array (204 is
++ * not a multiple of 8): every move from number 69 on was read 4 bytes off. So they are ONE array here, the second and third parts following
++ * with no gap (496 bytes: 495 of table and 1 spare). D_80078180 and D_800781E0 were never referred to by name. (Found with the array-bounds
++ * checking build: an index of 258 into the 204-byte array.) */
++u8 D_800780B4[204 + 96 + 196] = {
++    /* ---- D_800780B4: 204 bytes ---- */
+=3
+@@ -414,16 sha256=a241a5a3a85d7ea4507d9340d590d96f81a6627a999cc3bfb43eb03df6847609 @@
+=3
+-2
++    /* ---- D_80078180: 96 bytes ---- */
+=6
+-2
++    /* ---- D_800781E0: 196 bytes ---- */
+=3

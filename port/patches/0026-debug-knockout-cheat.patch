@@ -1,0 +1,92 @@
+Port patch 0026 - debug cheat: L+R knocks out the opponent's Pokemon (L+R+Z wins the battle)
+Why: a requested quality-of-life/debug feature of the port. It is carried out inside the game's own battle code, not by the host poking at memory from outside, so that the game's
+normal faint sequence plays and its state machine stays consistent.
+How: Port_WatchKnockoutChord (battle_engine_main.c, called at the start of every battle frame, BattleScene_UpdateFrame) looks at the first player's controller:
+L and R both held and any of L, R, Z newly pressed arms the cheat, whatever the order the buttons went down in (Z held as well: the "win" variant; a knock-out that is already armed is upgraded when Z joins, never downgraded). The cheat is carried out in Battle_ResolveMonAction
+(battle_engine_359F90.c) right after the turn's calculation and before the game's own faint check (Battle_CheckFaintAfterMove): the opponent's active Pokemon gets
+current HP 0 (BattleMonRuntime.unk_0C; the HP shown on screen follows it through BattleScene_AnimateDisplayedHpToRuntime) and, for the "win" variant, every other
+Pokemon the opponent brought gets HP 0 in the roster (BattleMon.unk_02), which the Battle_CheckAllBroughtFainted_* functions add up. So after the NEXT turn resolves
+(the player picks a move as usual) the opponent faints with the normal animation. When no HP animation is pending (the shown HP BattleMon.unk_02 equals the real HP, which is the case after a move that missed, failed or did no damage) the shown HP and its float tracker D_843900A8 are set to 0 too: after such a move the game calls BattleScene_AnimateDisplayedHpToRuntime only once per presentation round (about 50 frames), a step of max HP / 90 each, so the bar would otherwise need over a minute (reported by the user: "drains incredibly slowly" after a miss or a failed effect). After a damaging move the scene animates every frame and the cheat leaves the shown HP alone. It is not applied in the middle of a menu: the state machine of the turn playback is not
+meant to be interrupted there.
+The opponent is the side whose active Pokemon is not controlled by gPlayer1Controller (state.unk_C8). The host decides whether the cheat is on (__osHostCheatsEnabled:
+settings menu / config file, default on) and gets notices (__osHostCheatNotice) to show a message on screen and write the log.
+The armed state (sPortCheatPending) is an overlay variable: it starts at zero whenever the battle overlay is loaded, so a cheat armed in one battle cannot fire in the next.
+Meaning of the fields was taken from reading the decomp (unk_0C = current HP: BattleScene_AnimateDisplayedHpToRuntime, D_843900A8; unk_28 = maximum HP) and is checked by a
+scripted Linux battle (see docs/windows-test-guide.md); the decomp's own names for these fields are still "unk_".
+
+--- a/src/fragments/battle_engine/battle_engine_359F90.c
++++ b/src/fragments/battle_engine/battle_engine_359F90.c
+@@ -1811,6 sha256=36e64eed540f2fce79b785d5a4fefe32a4057924d0566a73de3dfcef36469d2f @@
+=3
++/* PORT (patch 0026): the debug "knock-out" cheat. BattleScene_UpdateFrame (battle_engine_main.c) arms it when the player presses L+R (+Z); it is carried
++ * out here, at the end of a turn's calculation and before the game checks for fainted Pokemon, so that the game's own faint sequence plays (the HP bar runs
++ * down, "fainted", the next Pokemon or the end of the battle) exactly as after a real knock-out. 0 = nothing armed, 1 = the opponent's active Pokemon
++ * faints, 2 = the whole opposing team is out (the battle is won). Overlay variable: it is zero whenever the battle overlay is loaded. */
++u8 sPortCheatPending;
++extern void __osHostCheatNotice(int what, int applied);
++
++static void Port_ApplyKnockoutCheat(void) {
++    ActivePokemon* foe;
++    s32 i;
++
++    if (sPortCheatPending == 0) {
++        return;
++    }
++    /* the opponent is the side that the first player's controller does not control (the CPU, or the second player) */
++    foe = (sActivePokemon[0]->state.unk_C8 == gPlayer1Controller) ? sActivePokemon[1] : sActivePokemon[0];
++    /* The shown HP (roster HP, BattleMon.unk_02) follows the real HP (runtime.unk_0C) in BattleScene_AnimateDisplayedHpToRuntime, a step of maxHP / 90 per call.
++     * After a move that did damage the scene calls it every frame, so the bar runs down in about a second and a half. After a move that did none (it missed or
++     * failed, or a status move) the scene calls it once per presentation round (about 50 frames), because the real game has nothing to animate there: the bar
++     * would take over a minute. So when no HP animation is pending (the shown HP equals the real HP) the shown HP is set to 0 together with the real HP. */
++    if (foe->teamRoster->pokemonPicked[foe->state.rosterIndex].unk_02 == foe->state.runtime.unk_0C) {
++        foe->teamRoster->pokemonPicked[foe->state.rosterIndex].unk_02 = 0;
++        D_843900A8[BattleScene_GetParticipantSideIndex(foe)] = 0.0f;
++    }
++    foe->state.runtime.unk_0C = 0; // current HP (see BattleScene_AnimateDisplayedHpToRuntime: the shown HP follows this value)
++    if (sPortCheatPending == 2) {
++        for (i = 0; i < foe->teamRoster->numberOfPokemonBrought; i++) {
++            if (i != foe->state.rosterIndex) {
++                foe->teamRoster->pokemonPicked[i].unk_02 = 0; // the others: HP 0 (Battle_CheckAllBroughtFainted_* add these up)
++            }
++        }
++    }
++    __osHostCheatNotice(sPortCheatPending, 1);
++    sPortCheatPending = 0;
++}
++
+=3
+@@ -1841,6 sha256=7e4c3939fcaabdc036b9ee9a443dfd3cea2b8997e7241c70698058d49526bca2 @@
+=3
++    Port_ApplyKnockoutCheat(); // PORT (patch 0026)
+=3
+--- a/src/fragments/battle_engine/battle_engine_main.c
++++ b/src/fragments/battle_engine/battle_engine_main.c
+@@ -393,10 sha256=7b4ac441a618391d25eb7c8d4a771043f9fee6a45b0b87c5a5574861d0208b41 @@
+=3
++/* PORT (patch 0026): see Port_ApplyKnockoutCheat in battle_engine_359F90.c. The host says whether the cheat is switched on (settings menu / config file). */
++extern u8 sPortCheatPending;
++extern int __osHostCheatsEnabled(void);
++extern void __osHostCheatNotice(int what, int applied);
++
++static void Port_WatchKnockoutChord(void) {
++    const u16 chord = BTN_L | BTN_R;
++    u8 level;
++
++    if (!__osHostCheatsEnabled()) {
++        return;
++    }
++    /* L and R held, and any of L, R, Z newly pressed this frame (so the order in which the buttons go down does not matter): Z held as well = win the
++     * battle (2), otherwise one knock-out (1). A knock-out that is already armed is upgraded when Z joins the chord, never downgraded. */
++    if (((gPlayer1Controller->buttonDown & chord) == chord) && ((gPlayer1Controller->buttonPressed & (chord | BTN_Z)) != 0)) {
++        level = BTN_IS_DOWN(gPlayer1Controller, BTN_Z) ? 2 : 1;
++        if (level > sPortCheatPending) {
++            sPortCheatPending = level;
++            __osHostCheatNotice(sPortCheatPending, 0);
++        }
++    }
++}
++
+=4
++
++    Port_WatchKnockoutChord(); // PORT (patch 0026)
+=3

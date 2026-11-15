@@ -1,0 +1,56 @@
+Port patch 0038 - audio: the sample rings the RSP reads (announcer / cry stream, Game Boy sound) are copied when the command is built
+Why: n_alMainBusPull (src/libnaudio/n_mainbus.c) builds two aLoadBuffer commands per pull that make the RSP read 0x170 bytes of a ring the CPU keeps filling
+(the streamed voice rings D_800FCF28[0..1], which carry the announcer's speech and the Pokemon cries, and the Game Boy sound ring D_800FC6D8). The producer
+(func_80044EA4 in src/audio_stream.c) keeps its write position well ahead of the read position D_800FCF30 that this function advances, and it is
+calibrated for a console where the RSP runs the command list right after it is built (the read position is 1 to 3 pulls ahead of the load at most).
+In the port the audio microcode runs on its own thread (and gets delayed behind other work), and the load happened up to 6 pulls after the pointer moved: measured on
+the Linux build in a battle (KYUJO_STREAM_DUMP / an RSP DMA probe), 63 percent of the loads were 4 to 6 pulls late and 3.5 percent of all loads straddled
+the producer's write position or had been lapped (the region had already been overwritten with newer samples): the announcer's speech got clicks and static,
+on Windows, Linux and the Switch alike (the Stadium recompilation project lists the same "announcer speech still carries static during battles"). With the
+audio task run synchronously the lag is 1 to 3 pulls and torn loads fall to 0.2 percent, which confirms the cause.
+The patch copies the 184 samples of each pull into a slot of a 16-slot ring of snapshots at build time and points the commands at the copy, so the RSP reads
+exactly what the console would have read. The producer and the rest of the audio are unchanged. Slots are not reused before the task has run (lag measured: up to 6 pulls; 16 slots per source leave a margin of more than two; 17 KB of image).
+Files: `src/libnaudio/n_mainbus.c`
+
+--- a/src/libnaudio/n_mainbus.c
++++ b/src/libnaudio/n_mainbus.c
+@@ -27,9 sha256=bc89c52b1d17db78b1fcc2a9e2d54a03d8c8a309173e9c2930ed2315a1d8caa3 @@
+=3
++/* port patch 0038: the RSP reads the CPU-written sample rings (the announcer / cry stream and the Game Boy sound) when the audio task runs, which on the
++ * console is right after the command list is built, but in the port can be several pulls later; by then the producer has written further and lapped the
++ * region, and the load returned newer samples than the pull was built for (a click or static). Each pull therefore copies its 0x170 bytes from the ring
++ * into a slot of its own at BUILD time and the command refers to the copy. 16 slots per source are not reused before the task has run (the port's lag
++ * was measured at up to 6 pulls, so 16 leaves a margin of more than two). */
++#define PULL_SNAP_SLOTS 16
++#define PULL_SNAP_SAMPLES 0xB8
++static s16 sPullSnap[3][PULL_SNAP_SLOTS][PULL_SNAP_SAMPLES] __attribute__((aligned(16)));
++static u32 sPullSnapNext[3];
++
++static s16* PullSnapshot(s32 source, const s16* src) {
++    s16* dst = sPullSnap[source][sPullSnapNext[source]];
++    s32 k;
++
++    sPullSnapNext[source] = (sPullSnapNext[source] + 1) % PULL_SNAP_SLOTS;
++    for (k = 0; k < PULL_SNAP_SAMPLES; k++) {
++        dst[k] = src[k];
++    }
++    return dst;
++}
++
+=3
++    s16* snap;
+=3
+@@ -40,8 sha256=7e6bd809e13ba846baeb1ffd7eb7604d029b64e387e5a38f7be3aea59384d072 @@
+=3
+-2
++        snap = PullSnapshot(2, &D_800FC6D8[D_800FD6F0]);
++        n_aLoadBuffer(ptr++, 0x170, 0x7C0, osVirtualToPhysical(snap));
++        n_aLoadBuffer(ptr++, 0x170, 0x930, osVirtualToPhysical(snap));
+=3
+@@ -55,8 sha256=1e0045f278ec2223c6b7fdad873a88f5ae83371c669d36b059c56d4e3ba99f11 @@
+=3
+-2
++            snap = PullSnapshot(i, D_800FCF28[i]->unk_000 + D_800FCF30[i]);
++            n_aLoadBuffer(ptr++, 0x170, 0x7C0, osVirtualToPhysical(snap));
++            n_aLoadBuffer(ptr++, 0x170, 0x930, osVirtualToPhysical(snap));
+=3

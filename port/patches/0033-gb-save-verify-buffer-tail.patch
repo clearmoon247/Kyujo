@@ -1,0 +1,30 @@
+Port patch 0033 - the save verification buffer of the Game Boy cartridge save overflowed into the scheduler (crash while saving after the Pikachu reward)
+Why: a Windows tester's game crashed every time Pikachu was taught Surf (in the "Saving" step after choosing the move to forget), and the crash damaged yellow.sav. Reproduced on Linux (patch 0032 shows the scene) with the same garbage pointer; a debugger run showed the scheduler's client structure overwritten with the Game Boy text of the cartridge's PC boxes.
+Cause: GbSave_WriteBoxBank verifies each written box bank by reading it back (GbPak_MbcRead of 0x1A60 bytes) into D_800ACA78, which is declared as one GbSaveMainData (0xFC0 bytes). On the console the decomp's next array D_800ADA38[0xAA8] ("unreferenced bss") sat right behind it and took the extra 0xAA0 bytes. The native linker does not keep an unreferenced array there, so the bytes overwrote the next objects of the program's data (the scheduler's client list). Every save that rewrites the box banks did this, not only the Pikachu reward.
+How: D_800ACA78 and D_800ADA38 become one struct (GbSaveMainData followed by the tail array), so the bytes really follow the buffer. Nothing else changes; the console layout is the same.
+
+(Same kind of bug as patches 0022, 0023 and 0031: the decomp split one object in two and relied on the linker keeping them together.)
+
+--- a/src/pokemon_stats.c
++++ b/src/pokemon_stats.c
+@@ -144,12 sha256=b6f2c09b4be81b4c081c7faaa75ca9bcd363654a71d8b328a51cb4145a988719 @@
+=3
+-1
++/* PORT (patch 0033): D_800ACA78 is the buffer the cartridge's save is read back into to verify a write. The box banks are verified
++ * through it too (GbSave_WriteBoxBank: GbPak_MbcRead of 0x1A60 bytes, 0x15A0 on the Japanese version), which is MORE than
++ * sizeof(GbSaveMainData). On the console the linker kept the next array, D_800ADA38 ("unreferenced bss"), right behind it, so the
++ * extra bytes landed in that unused array. A native linker drops or moves an unreferenced array, and the bytes landed in whatever
++ * came next (the scheduler's client list: the game crashed in Sched_NotifyClients after every save that rewrote the box banks).
++ * The two are made one object, so the tail really follows the buffer. */
++static struct {
++    GbSaveMainData data;
+=1
+-1
++    u8 tail[0x588]; // was D_800ADA38, unreferenced bss
+=1
+-1
++    u8 tail[0xAA8]; // was D_800ADA38, unreferenced bss
+=1
++} D_800ACA78_block;
++#define D_800ACA78 (D_800ACA78_block.data)
+=3

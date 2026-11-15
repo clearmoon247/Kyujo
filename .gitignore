@@ -1,0 +1,50 @@
+# Game content: never commit
+*.z64
+*.n64
+*.v64
+*.rom
+*.gb
+*.gbc
+*.sav
+*.srm
+
+# Anything generated from a ROM or by a build
+generated/
+translated/
+dumps/
+ui_dump/
+*.nro
+*.nso
+*.elf
+*.o
+*.a
+*.ll
+build/
+build-*/
+logs/
+.work/
+*.bak
+
+# Tooling noise
+__pycache__/
+*.pyc
+.venv/
+.vscode/
+.idea/
+
+# Built programs and packages: they contain compiled decomp code and must never be committed or attached to a release (NOTICE.md)
+*.exe
+*.dll
+*.apk
+*.aab
+*.AppImage
+*.wasm
+*.so
+*.zip
+*.bundle
+*.keystore
+*.jks
+
+# Secrets
+.env
+*.pem

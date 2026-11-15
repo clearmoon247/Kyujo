@@ -1,0 +1,26 @@
+# Licence of the files that cannot carry a comment header (REUSE specification 3.x, https://reuse.software).
+# Source files (C, C++, headers, Python, shell, PowerShell, batch, CMake) carry their own SPDX tag at the top.
+# The meaning and the limits of this licence are in NOTICE.md; the components we use are in THIRD-PARTY.md.
+# tests/native/licence/test_licence.py fails if a tracked file is neither tagged nor listed here.
+version = 1
+SPDX-PackageName = "kyujo"
+SPDX-PackageDownloadLocation = "NONE"
+
+# Documentation, lists, data written for this project, the icon, the generated name table, repository settings.
+[[annotations]]
+path = [
+  "README.md", "NOTICE.md", "THIRD-PARTY.md", "docs/**", "assets/**", "tools/**/*.md", "android/README.md",
+  "port/*.txt", "src/platform/gbjp_names.inc", "dist/**/*.json",
+  ".gitignore", ".gitmodules", "REUSE.toml",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Dan B. Cooper"
+SPDX-License-Identifier = "GPL-3.0-only"
+
+# The port patches. GPL-3.0-only covers the lines we ADDED and our choice of changes. The context and removed lines in a patch are
+# text of the decompilation, which this licence does not cover and does not relicense (NOTICE.md).
+[[annotations]]
+path = ["port/patches/*.patch"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Dan B. Cooper (the added lines; the context lines belong to the decompilation)"
+SPDX-License-Identifier = "GPL-3.0-only"

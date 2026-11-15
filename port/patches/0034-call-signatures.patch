@@ -1,0 +1,111 @@
+Port patch 0034 - calls compiled with the wrong signature (found while building the game as WebAssembly for the Switch and Android port)
+Why: a function that is called without a prototype in scope (or through a wrong declaration) is compiled as `int f()` with the arguments of the call. On the console that never mattered: MIPS passes the first four arguments in registers whatever the callee declares and a result nobody reads is harmless. WebAssembly checks function types: the linker replaces a call whose type differs from the definition with a stub that traps at run time. 14 functions were affected (PokeIcon_OpenModelArchives, Audio_FadeCategoriesAndStreamsDefault/WithDuration, GbSave_MarkBoxDataLoaded, GbSave_SetSeenOwnedBits, LabPC_ShowBoxes, Text_LoadPlayerLabels, func_80033B2C, func_800361C4, func_81209078, HAL_Printf (profiler.c, util.c), Display_ClearFramebufferLine, Ui_DrawTextureMarker, and _bcopy in libleo/bootdisk.c).
+How: each caller gets the real prototype. Two calls passed an argument the callee ignores (Display_ClearFramebufferLine in reset.c, Ui_DrawTextureMarker in minigame_select); the extra argument is dropped. The header of the Game Boy Tower fragment declared func_81209078 as void although it returns s32. No change in behaviour on the native builds.
+
+--- a/src/fragments/dynamo_game/dynamo_game.c
++++ b/src/fragments/dynamo_game/dynamo_game.c
+@@ -20,6 sha256=90914d2c30b6e56111deb6bd4612a3435e02f17fcdd6004b73d341cac83b0387 @@
+=3
++/* PORT (patch 0034): the real prototype, so the call has the right signature (a call without one is compiled as `int f()`). */
++void PokeIcon_OpenModelArchives(void);
++
+=3
+--- a/src/DDC0.c
++++ b/src/DDC0.c
+@@ -11,6 sha256=bdd5489cdaed1222d45f735350fec1baaed385ee82b069a8700e7bb4db544b09 @@
+=3
++/* PORT (patch 0034): the real prototype, so the call has the right signature (a call without one is compiled as `int f()`). */
++void Audio_FadeCategoriesAndStreamsDefault(void);
++void Audio_FadeCategoriesAndStreamsWithDuration(s32 arg0);
++
+=3
+--- a/src/fragments/lab_pc_list/lab_pc_list_1E46B0.c
++++ b/src/fragments/lab_pc_list/lab_pc_list_1E46B0.c
+@@ -7,6 sha256=f598ecb54b44889c2027f9ece6cf77949df396ab241e4939b8c3114c239969f3 @@
+=3
++/* PORT (patch 0034): the real prototype, so the call has the right signature (a call without one is compiled as `int f()`). */
++void GbSave_SetSeenOwnedBits(s32 arg0, s32 arg1, s32 arg2);
++
++/* PORT (patch 0034): the real prototype, so the call has the right signature (a call without one is compiled as `int f()`). */
++void GbSave_MarkBoxDataLoaded(s32 arg0);
++
+=3
+--- a/src/fragments/lab_pc/lab_pc_1A8590.c
++++ b/src/fragments/lab_pc/lab_pc_1A8590.c
+@@ -5,6 sha256=a30729e594796c93e50383ef218e8389a93a0c4c494a88943008208c44ba2564 @@
+=3
++/* PORT (patch 0034): the real prototype, so the call has the right signature (a call without one is compiled as `int f()`). */
++void LabPC_ShowBoxes(FontContext* arg0);
++
+=3
+--- a/src/reset.c
++++ b/src/reset.c
+@@ -2,6 sha256=d1e6cc4051416732a18b25d066d18f1429d2c1b9a2000b0edb94f93d3da3f9c3 @@
+=3
++/* PORT (patch 0034): the real prototype. */
++void Display_ClearFramebufferLine(u16 color);
++
+=3
+@@ -88,8 sha256=666fee6fa0a218e3d1fad4b4ac514b464c4e982a77e9648ecb991bcefc45b3c3 @@
+=3
+-2
++                          0xFFFF); /* PORT (patch 0034): the function takes one argument; the second (gSoftResetLineNum) was ignored */
+=3
+--- a/src/fragments/gb_tower_emulator/gb_tower_emulator.h
++++ b/src/fragments/gb_tower_emulator/gb_tower_emulator.h
+@@ -21,7 sha256=37eaa05c76f324676697bae0d7b67cb593f5f9ab8c45614108cac3dc212de3d6 @@
+=3
+-1
++s32 func_81209078(void); /* PORT (patch 0034): was `void func_81209078();`; the definition returns s32 */
+=3
+--- a/src/profiler.c
++++ b/src/profiler.c
+@@ -2,6 sha256=a610cd35f4c9cc5a738de62fda35b42cc63bcc7822d5e5be3db3426d62155a4b @@
+=3
++/* PORT (patch 0034): the real prototype, so the call has the right signature (a call without one is compiled as `int f()`). */
++s32 HAL_Printf(s16 x, s16 y, const char* fmt, ...);
++
+=3
+--- a/src/util.c
++++ b/src/util.c
+@@ -3,6 sha256=b0552681b3600f6254d2c9c18713b806375dca4d6ee60e78aaefe673827bea1c @@
+=3
++/* PORT (patch 0034): the real prototype, so the call has the right signature (a call without one is compiled as `int f()`). */
++s32 HAL_Printf(s16 x, s16 y, const char* fmt, ...);
++
+=3
+--- a/src/fragments/minigame_select/minigame_select_27BCC0.c
++++ b/src/fragments/minigame_select/minigame_select_27BCC0.c
+@@ -6,7 sha256=2dbb3ce471c5d18fe5a9795378de923082bbe465b2e8bb5c0f0cf8b995b8deea @@
+=3
+-1
++extern void Ui_DrawTextureMarker(s32 x, s32 y); /* PORT (patch 0034): the real prototype; the call below passed a third argument the function does not take */
+=3
+@@ -1884,7 sha256=867410047729e056afcd4a9e0e449edd4ce36df5696f834bac9ebc004aabbf4a @@
+=3
+-1
++        Ui_DrawTextureMarker(sp40 + var_a2, sp38);
+=3
+--- a/src/libleo/bootdisk.c
++++ b/src/libleo/bootdisk.c
+@@ -1,6 sha256=85e2bab177070504b15f609b6aea8f97830390b4430eb83363ec77872feec929 @@
+=3
++void _bcopy(void* src, void* dst, s32 n);
+=3
+--- a/src/fragments/n64_logo/n64_logo.c
++++ b/src/fragments/n64_logo/n64_logo.c
+@@ -12,6 sha256=243eccf5fd8ff493c7414006a6e92092362ee27b55d93ded4f8709edf41e6c70 @@
+=3
++/* PORT (patch 0034): the real prototype, so the call has the right signature (a call without one is compiled as `int f()`). */
++void Text_LoadPlayerLabels(void);
++
+=3
+--- a/src/model_renderer_callbacks.c
++++ b/src/model_renderer_callbacks.c
+@@ -6,6 sha256=5e2304be869fab70821b290ebe79b2656bb790d72ec815a1e56fc73256d50097 @@
+=3
++/* PORT (patch 0034): the real prototype, so the call has the right signature (a call without one is compiled as `int f()`). */
++void func_80033B2C(StadiumModel* model, void* arg1, void* arg2, void* arg3);
++void func_800361C4(StadiumModel* model, MtxF* mtx);
++
+=3

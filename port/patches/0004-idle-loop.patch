@@ -1,0 +1,15 @@
+Port patch 0004 - host idle in the idle thread
+Why: Idle_ThreadEntry ends in an empty endless loop that the console's interrupts preempt. A host thread cannot be preempted by
+an N64 interrupt, so the loop waits for a hardware event and delivers it (HostIdle in src/ultra/os_sched.c).
+
+--- a/src/main.c
++++ b/src/main.c
+@@ -19,6 sha256=785ce034af963d20365d92ece9620fd7ea389f2396bf16c7c4a75f67642570e8 @@
+=3
++void HostIdle(void); // PORT
+=3
+@@ -35,7 sha256=3e1ecbcd2992f58ea1277b212d925cc150332449a48c9d20136e21a772d3ba19 @@
+=3
+-1
++        HostIdle(); // PORT: the original spins here until an interrupt preempts it; see src/ultra/os_sched.c
+=3

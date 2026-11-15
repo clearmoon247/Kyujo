@@ -1,0 +1,2 @@
+# Functions that the build may leave as stubs (a call stops the game and names the function). Only the decomp's own unfinished ones belong here.
+__LeoBootGame3     # the 64DD boot path of the decomp: never reached (no 64DD)

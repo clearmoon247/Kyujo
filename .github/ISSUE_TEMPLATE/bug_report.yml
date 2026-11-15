@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Dan B. Cooper
+name: Something doesn't work
+description: Kyujo crashes, looks wrong, sounds wrong or the setup stops
+body:
+  - type: dropdown
+    id: system
+    attributes:
+      label: Which system?
+      options: [Windows, Linux, Batocera, Nintendo Switch, Android]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead? A screenshot helps.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: The log
+      description: "Paste or attach the log: kyujo-log.txt (Windows, Linux), kyujo.log (Batocera), KYUJO-SDL-LOG.TXT (Switch, Android: the launcher's \"Save the log\"). For a setup problem: work\\logs\\setup.log and work\\logs\\build.log. The logs contain no game data."
+  - type: input
+    id: version
+    attributes:
+      label: Kyujo version
+      description: The release you downloaded, or the commit you built.
+  - type: markdown
+    attributes:
+      value: "Please don't attach the game file, a built program or a save you want to keep private."

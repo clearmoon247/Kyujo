@@ -1,0 +1,60 @@
+Port patch 0015 - return the value the console leaves in register v0 where the decomp has no `return`
+Why: 35 non-void functions of the decomp run off their end (clang: -Wreturn-type). On the console the caller sees what is left in
+v0; in clang's output the result is an undefined value. tools/native/be_memory.py (rule 6) makes every such path return 0, which is
+right for functions whose result nobody reads. The functions below are read by their callers, so they get an explicit return:
+  - Audio_DispatchSoundBankCommand, Audio_PlayDirectSoundCommand, Audio_PlayCategory11SoundCommand, Audio_PlayCategory12SoundCommand:
+    each ends with `D_80079018 = x;` and the console returns that same x (still in v0). Without it the sound handle was lost, the
+    game could never stop looping sound effects, and a later sound-bank swap left a running effect reading another bank's bytes (found
+    by running the game: crash in the audio thread after the rental screen).
+  - Gallery_GetCommonUiString / Gallery_CopyCommonUiString: return the result of their Text_GetString call (still in v0).
+  - Effect_TriggerMoveVisual: returns `ret`, the handle of the sound it just started. NOT VERIFIED against the console code: the
+    decomp has no return, so the original value cannot be read from it; the callers store it as the sound handle, so this is the only
+    sensible value.
+
+--- a/src/audio_commands_category2.c
++++ b/src/audio_commands_category2.c
+@@ -1092,6 sha256=5e2786232b3c4b995b3cfee0db15ac9d1878309478753265173d8edfa373da5e @@
+=3
++    /* PORT: the original falls off the end here and the caller sees what the last instruction left in register v0 (the value stored just above);
++     * on the port that would be an undefined value. */
++    return var_v0;
+=3
+@@ -1179,6 sha256=baf3637731273f4f7d3de0af63f8998dc529fc9589bdcf1cd1acdb1abbd71445 @@
+=3
++    /* PORT: the original falls off the end here and the caller sees what the last instruction left in register v0 (the value stored just above);
++     * on the port that would be an undefined value. */
++    return var_v0;
+=3
+@@ -1320,6 sha256=6def4cd69b2dcc17aa1f43b316dcdadd47df483418c5caa0f3c3a55e8c18243d @@
+=3
++    /* PORT: the original falls off the end here and the caller sees what the last instruction left in register v0 (the value stored just above);
++     * on the port that would be an undefined value. */
++    return temp_v0_2;
+=3
+@@ -1439,4 sha256=99f041df658446ed7b3c12ba7b6416166b4fcd5f378262e873996b586db9058b @@
+=3
+-1
++    /* PORT: the original falls off the end here and the caller sees what the last instruction left in register v0 (the value stored just above);
++     * on the port that would be an undefined value. */
++    return sp4C;
++}
+--- a/src/audio_fade.c
++++ b/src/audio_fade.c
+@@ -385,6 sha256=6f75c793c441bba1a8245fb3d444c613686ab673e19b6a8a7ebbd88d6693879f @@
+=3
++    /* PORT: the original has no return here, so its result is whatever was left in v0 (not verified). The callers store the result as the
++     * sound handle to stop or fade the sound later, so the handle of the sound just started is returned. */
++    return ret;
+=3
+--- a/src/fragments/gallery_backgrounds/gallery_backgrounds_2A3E70.c
++++ b/src/fragments/gallery_backgrounds/gallery_backgrounds_2A3E70.c
+@@ -18,9 sha256=85ac255abe2660765b1894274980958c7b651aae8596fa8d264c6cd38585ac79 @@
+=3
+-1
++    /* PORT: the original lacks the `return`; its result is the call's result still sitting in v0. */
++    return Text_GetString(NULL, 0, D_83407BF4, arg0);
+=3
+-1
++    /* PORT: the original lacks the `return`; its result is the call's result still sitting in v0. */
++    return Text_GetString(arg0, arg1, D_83407BF4, arg2);
+=1

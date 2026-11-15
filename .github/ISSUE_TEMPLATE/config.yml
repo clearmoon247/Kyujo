@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Dan B. Cooper
+blank_issues_enabled: true
+contact_links:
+  - name: Problem with the game itself or its code
+    url: https://github.com/team-hippodrome/pokestadium/issues
+    about: Kyujo is built on Team Hippodrome's decompilation. Bugs in the original game's logic belong there.

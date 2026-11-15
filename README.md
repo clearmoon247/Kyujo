@@ -4,7 +4,7 @@
 
 # Kyujo
 
-Play an N64 classic as a native program on **Windows, Linux (including Batocera), Nintendo Switch and Android**, using your own game file. Kyujo is built from the community decompilation of the game by **[Team Hippodrome](https://github.com/team-hippodrome/pokestadium)**, whose years of work make this possible (see [Credits](#credits)).
+Play an N64 classic as a native program on **Windows, Linux (including Batocera), Nintendo Switch and Android**, using your own game file. Kyujo is built from the community decompilation of the game by **[Team Hippodrome](https://github.com/team-hippodrome/pokestadium)** and **[Pret](https://github.com/pret/pokestadium)** whose years of work make this possible (see [Credits](#credits)).
 
 > **Not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc. or The Pokémon Company.** Game and company names are used only to say which game and which hardware Kyujo works with. See [`NOTICE.md`](NOTICE.md).
 

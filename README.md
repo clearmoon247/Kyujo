@@ -79,7 +79,7 @@ Open an [issue](../../issues/new/choose) and tell us your system and what happen
 
 ## Credits
 
-- **[Team Hippodrome](https://github.com/team-hippodrome/pokestadium)** for the decompilation of the game: its logic, data and structure are their work, and Kyujo is only the platform layer around it. The decompilation is **not copied into this repository and not modified**: it is fetched from their repository (a git submodule pinned to one commit) and a few small, documented patches are applied to a copy while building. Please look at their project too.
+- **[Team Hippodrome](https://github.com/team-hippodrome/pokestadium)** and **[Pret](https://github.com/pret/pokestadium)** for the decompilation of the game: its logic, data and structure are their work, and Kyujo is only the platform layer around it. The decompilation is **not copied into this repository and not modified**: it is fetched from their repository (a git submodule pinned to one commit) and a few small, documented patches are applied to a copy while building. Please look at their project too.
 - The other components Kyujo uses (SDL2, wabt, and others) and their licences: [`THIRD-PARTY.md`](THIRD-PARTY.md).
 
 ## Licence
